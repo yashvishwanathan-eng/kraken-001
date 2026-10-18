@@ -79,6 +79,15 @@ docs/disclosures.md
 | GET | /stats | `{by_type:{...}, by_day:[{date,count}], open, resolved, avg_response_s}` |
 | POST | /twilio/voice, /twilio/gather, /twilio/status | Twilio webhooks only |
 | POST | /internal/incidents/{id}/created | worker to API only |
+| POST | /internal/heartbeat | worker to API only; `{camera_id, fps, online, ts}`; see Product updates §7 |
+| POST | /auth/pin | body `{pin}`; returns `{token, user:{id,name,role}}`; PIN login for the control-room laptop |
+| GET | /me | current user: `{id, name, role, camera_ids[], actions[]}` |
+| GET, POST, PUT, DELETE | /users | `{id,name,role,camera_ids[],actions[],active}`; `pin` is write-only, never returned |
+| GET | /roll-call | `?incident_id=`; returns `{total, responding, safe, not_reached, guards:[{id,name,status}]}`, status = pending, responding, safe, not_reached |
+| POST | /alerts/all | body `{message}`; WhatsApp to all on-shift guards, red banner on every dashboard, parallel calls |
+| POST | /assistant/command | body `{text}`; returns `{intent, status, answer, confirm_token, ms}`, status = done, needs_confirmation, unknown |
+| POST | /assistant/confirm | body `{confirm_token, confirmed}`; returns `{status, answer, ms}` |
+| GET | /audit-log | filters: user, action, channel (dashboard, phone, voice), from, to (ISO UTC); newest first; each row `{at, user, action, target, channel}` |
 
 Incident object:
 ```json
@@ -149,6 +158,43 @@ ngrok http 8000
 
 ## .env keys
 DATABASE_URL, INTERNAL_KEY, PUBLIC_BASE_URL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, WHATSAPP_API_URL, WHATSAPP_TOKEN, GROQ_API_KEY, GROQ_MODEL, GROQ_STT_MODEL, OLLAMA_URL, OLLAMA_MODEL, OFFLINE_MODE, MEDIA_DIR
+
+## Product updates (18 Oct)
+Decisions from the 18 Oct product review. Where they conflict with earlier sections, the conflict is listed under "Open conflicts" and is not resolved here.
+
+1. **Roles and camera delegation.** One permission system, not hard-coded roles. A user has a role label, a list of allowed cameras and a list of allowed actions. Demo seed roles: Admin, Manager, Head Guard, Guard. Each user sees only their delegated cameras and incidents. PIN login on the control-room laptop.
+2. **Severity routing** (replaces the zone ladder for routed incidents):
+   - Critical (fire, fall): call the Head Guard of that camera's group first. No answer in 60 s → call the Admin.
+   - High (restricted entry, unattended bag, crowding): call the Head Guard. Restricted entry at night counts as critical. The night window is set in config, not hard-coded.
+   - Low (helmet/vest): WhatsApp and dashboard only, plus a daily digest. A call only if the same zone repeats 3 times within 1 hour.
+   - Never call the CEO level. No CEO role exists in the seed roles.
+3. **Phone commands.** Head Guard and Admin can speak or press keys during an alert call. "Alert everybody" sends an instant WhatsApp to all on-shift guards, shows a red banner on every dashboard, and starts parallel calls. Twilio places about 1 new call per second by default, so a full roll-out takes time. Say so on stage.
+4. **Roll call.** Every alerted guard presses 1 = responding or 2 = safe/evacuated. The dashboard shows a live board, e.g. "14 of 20 responded, 6 not reached".
+5. **Laptop assistant.** Internal nickname "Jarvis". Public and UI name is the product name (`PRODUCT_NAME`). Jarvis must not appear in user-facing text.
+   - Input: push-to-talk on the spacebar always works. Optional offline wake word.
+   - Fast path: keyword/pattern match for about 12 known commands. No LLM.
+   - Smart path: Groq function calling.
+   - Knowledge path: small RAG over SOP and contacts documents.
+   - A pre-recorded acknowledgement plays immediately while the action runs.
+   - Big actions need a spoken "yes" first (`/assistant/confirm`): call everybody, call a person or zone, evacuate, call the fire station, close a critical incident. "Stop all calls" is not gated.
+   - Commands: call everybody/person/zone; broadcast a message; status report; show camera N; what happened in the last hour; acknowledge or resolve an incident; stop all calls; who has not responded; call the fire station (only when a human orders it); SOP questions.
+6. **Audit log.** Every action records who, what, when, and channel (dashboard, phone or voice).
+7. **Heartbeat.** If a camera or worker goes down, WhatsApp the Admin. The worker sends `POST /internal/heartbeat`. The silence timeout is a config value, not yet set.
+
+Build priority if time runs short: detection, rules and dashboard → roles and delegation → severity routing and escalation → phone commands and roll call → laptop assistant → RAG and wake word.
+
+Contract changes this section needs (pending frontend sign-off, `frontend/BRIEF.md` must be updated):
+- New endpoints are in the table above.
+- Every endpoint except `/health`, `/auth/pin`, `/twilio/*`, `/internal/*` and `/stream/*` needs a token from `/auth/pin`.
+- `POST /events/{id}/ack` should take the user from the token, not from the `by` field. Still to decide.
+- New timeline actions: `roll_call_responded`, `roll_call_safe`, `alert_all`, `command`. The enum in the Incident object section is not yet updated.
+
+Open conflicts (need a decision):
+- The "Escalation and calls" ladder (zone guard → 60 s → 2 min supervisor → 5 min manager) conflicts with severity routing above. Decide whether the ladder remains for high incidents after the Head Guard fails to answer.
+- The "Incident rules" table has restricted entry as high. Item 2 makes it critical at night. The night window needs a value.
+- "Critical: voice/keypad can only acknowledge; closing needs the dashboard." Item 5 lets a spoken "yes" close a critical incident. One of the two has to change.
+- Decide whether Admin is the top call level, and what the Manager role does in routing.
+- Values still needed: night window, heartbeat silence timeout, digest time.
 
 ## Current status (update this daily)
 - Day: Sun 18 Oct, setup and skeleton
