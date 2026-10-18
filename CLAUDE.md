@@ -173,7 +173,7 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Tests: rules engine (fake detections in, expected incidents out) and the assistant filter parser.
 
 ## Current status (update this daily)
-- Day: Sun 18 Oct, setup and skeleton
-- Done: CLAUDE.md saved; backend skeleton (FastAPI app, config, CORS, /health stub, one test, .env.example); docs/disclosures.md started. pytest passes (1 test); API boots and /health returns the contract shape. Product decisions resolved; API contract moved to docs/CONTRACT.md.
-- Next: database models and Alembic setup; cameras and zones endpoints.
-- Blockers: none
+- Day: Sun 18 Oct, Day 1 build
+- Done: CLAUDE.md and docs/CONTRACT.md confirmed. Backend skeleton matches the folder structure (routers and services are stubs). `config.py` has every .env key and config value. SQLAlchemy models for Camera, Zone, User, Responder, Incident, TimelineEvent, AuditLog; first Alembic migration applied to local PostgreSQL 16. `GET /health` checks the DB. `config/cameras.yaml` has cam-webcam (source 0) and cam-phone. `worker/run_worker.py` tracks persons with YOLO11n every 3rd frame and prints FPS. pytest: 3 passed. API boots and `/health` returns db ok.
+- Next: PIN login and `/me`, users, cameras and zones endpoints, signed stream URL, then the incident rules.
+- Blockers: not tested with a real webcam or phone camera (sandbox has neither). Test ran on a video file. Run the worker on the Windows laptop before the demo.
