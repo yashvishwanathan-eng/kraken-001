@@ -57,7 +57,7 @@ docs/
 
 ## How the parts talk
 - Each camera runs its own worker process. The API never runs detection inside a request.
-- Worker serves annotated MJPEG on its own port; `GET /stream/{camera_id}` proxies it (httpx streaming).
+- Worker serves annotated MJPEG on its own port; `GET /stream/{camera_id}?st=<token>` proxies it (httpx streaming). `/cameras` returns the signed `stream_url`; the token is 1 hour and checked against the user's delegated cameras.
 - Worker confirms an incident, saves clip + snapshot, inserts the row, then calls `POST /internal/incidents/{id}/created` on the API (header `X-Internal-Key`). The API broadcasts it on `/ws/events` and starts escalation.
 - Worker sends `POST /internal/heartbeat` (proposed). If a camera goes silent for 30 s, the API WhatsApps the Admin.
 - Worker reconnects to a lost camera every 5 s and reports status; `/health` shows each camera online/offline + FPS.
@@ -84,17 +84,18 @@ See `docs/CONTRACT.md`. Endpoints, request and response shapes, the incident obj
 - `NIGHT_START=20:00`, `NIGHT_END=06:00`, `TIMEZONE=Asia/Kolkata` (IST). Restricted entry in this window is critical.
 - `DIGEST_TIME=18:00` IST. Daily digest of low-severity incidents.
 - `HEARTBEAT_TIMEOUT_S=30`.
+- `STREAM_TOKEN_TTL_S=3600` (signed stream URL lifetime).
 - `LOW_REPEAT_COUNT=3`, `LOW_REPEAT_WINDOW_MIN=60`.
 - `CRITICAL_ADMIN_DELAY_S=60` (critical: admin is called after the head guard has had 60 s).
 
-## Escalation and calls (resolved 18 Oct)
+## Escalation and calls (confirmed 18 Oct)
 Times are cumulative from incident creation. A ladder stops at the first acknowledgement, from any channel.
 
 Routing by severity:
 - **Critical** (fire, fall; restricted entry at night):
   - 0 s: call the Head Guard of that camera's group. WhatsApp the Admin (snapshot).
   - 60 s: call the Admin.
-  - 2 min: call the Manager.
+  - 2 min: call the Manager (fallback if the Admin does not answer). Confirmed.
   - Never call above Admin.
 - **High** (restricted entry in the day, unattended bag, crowding):
   - 0 s: call the Head Guard of that camera's group. WhatsApp the Admin.
@@ -102,7 +103,7 @@ Routing by severity:
   - The Admin gets WhatsApp only, not a call.
 - **Low** (ppe, loitering):
   - No calls.
-  - WhatsApp to the zone's Manager (the Manager role delegated to that zone).
+  - WhatsApp to the zone manager: the Manager role delegated to that zone. Confirmed.
   - Daily digest at 18:00 IST.
   - If the same zone repeats 3 times within 1 hour, call the Head Guard once for that zone.
 
@@ -118,8 +119,8 @@ Call mechanics:
 - Never auto-call fire services or 112.
 - Twilio trial: only verified numbers can be called.
 
-## Product updates (18 Oct)
-Decisions from the 18 Oct product review. Escalation details are in the section above; the endpoint list is in `docs/CONTRACT.md`.
+## Product updates (18 Oct, confirmed by Kirito)
+Decisions from the 18 Oct product review, all confirmed. Escalation details are in the section above; the endpoint list is in `docs/CONTRACT.md`.
 
 1. **Roles and camera delegation.** One permission system, not hard-coded roles. A user has a role label, a list of allowed cameras and a list of allowed actions. Demo seed roles: Admin, Manager, Head Guard, Guard. Each user sees only their delegated cameras and incidents. PIN login on the control-room laptop.
 2. **Severity routing.** See "Escalation and calls". There is no CEO role; the top call level is Admin.
@@ -131,7 +132,7 @@ Decisions from the 18 Oct product review. Escalation details are in the section 
    - Smart path: Groq function calling.
    - Knowledge path: small RAG over SOP and contacts documents.
    - A pre-recorded acknowledgement plays immediately while the action runs.
-   - A spoken "yes" only confirms launching a big action (`/assistant/confirm`). Big actions are: call everyone, evacuate, call the fire station.
+   - A spoken "yes" only confirms launching a big action (`/assistant/confirm`). Big actions are: call everyone, evacuate, call the fire station. Calling one person or one zone is not gated.
    - The assistant can acknowledge any incident. It cannot close a critical incident; that needs the dashboard.
    - Commands: call everybody/person/zone; broadcast a message; status report; show camera N; what happened in the last hour; acknowledge or resolve an incident; stop all calls; who has not responded; call the fire station (only when a human orders it); SOP questions.
 6. **Audit log.** Every action records who, what, when, and channel (dashboard, phone or voice). Visible to Admin and Manager.
@@ -139,7 +140,7 @@ Decisions from the 18 Oct product review. Escalation details are in the section 
 
 Build priority if time runs short: detection, rules and dashboard → roles and delegation → severity routing and escalation → phone commands and roll call → laptop assistant → RAG and wake word.
 
-Frontend: the proposed endpoints, the `POST /events/{id}/ack` change and the proposed timeline actions are in `docs/CONTRACT.md` and still need the teammate's sign-off. The teammate updates `frontend/BRIEF.md` to point at the contract.
+Frontend: all of the above is confirmed in `docs/CONTRACT.md`. The teammate updates `frontend/BRIEF.md` to point at the contract.
 
 ## Commands (PowerShell, from backend/)
 ```
