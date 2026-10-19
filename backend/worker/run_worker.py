@@ -2,8 +2,9 @@
 
     python -m worker.run_worker --camera cam-webcam
 
-Day 1: read the camera, run person detection + tracking on every Nth frame,
-print analysed FPS. Rules, clips, heartbeats and the MJPEG server come later.
+A capture thread reads the camera nonstop (see worker/capture.py). This loop analyses the
+newest keyframe, draws boxes, track IDs and FPS, publishes the annotated JPEG on the local
+MJPEG port, and prints torso angles. Rules, clips and heartbeats come later.
 """
 
 import argparse
@@ -14,22 +15,28 @@ import time
 import cv2
 
 from app.config import get_settings, load_cameras
-from worker.detectors import PersonTracker
+from worker.capture import LatestFrameCapture
+from worker.detectors import Person, PersonPoseTracker, torso_angle_deg
+from worker.mjpeg import MjpegServer
 
-RECONNECT_DELAY_S = 5
-FPS_REPORT_EVERY_S = 5.0
+REPORT_EVERY_S = 5.0
+IDLE_SLEEP_S = 0.005
+JPEG_QUALITY = 80
 
 log = logging.getLogger("safetyai.worker")
 
 
-def parse_source(source: str) -> int | str:
-    """'0' means the laptop webcam index; anything else (URL or file path) is passed through."""
-    return int(source) if source.isdigit() else source
-
-
-def open_capture(source: str) -> cv2.VideoCapture | None:
-    cap = cv2.VideoCapture(parse_source(source))
-    return cap if cap.isOpened() else None
+def annotate(image, people: list[Person], fps_text: str):
+    out = image.copy()
+    for person in people:
+        x1, y1, x2, y2 = (int(v) for v in person.xyxy)
+        cv2.rectangle(out, (x1, y1), (x2, y2), (0, 200, 0), 2)
+        angle = torso_angle_deg(person.keypoints)
+        angle_text = "" if angle is None else f" {angle:.0f}deg"
+        cv2.putText(out, f"ID {person.track_id}{angle_text}", (x1, max(y1 - 6, 12)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 0), 1)
+    cv2.putText(out, fps_text, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+    return out
 
 
 def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
@@ -39,57 +46,54 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
         log.error("unknown camera %s; known: %s", camera_id, ", ".join(cameras))
         return 2
     camera = cameras[camera_id]
-    if source_override is not None:
-        camera = camera.model_copy(update={"source": source_override})
+    source = source_override if source_override is not None else camera.source
 
-    tracker = PersonTracker(settings.yolo_model_path, settings.detect_imgsz, settings.detect_conf)
+    tracker = PersonPoseTracker(settings.yolo_model_path, settings.detect_imgsz, settings.detect_conf)
     tracker.warm_up()
+    mjpeg = MjpegServer(camera.port).start()
+    capture = LatestFrameCapture(source, settings.detect_every_n_frames).start()
+    log.info("camera %s: stream on http://127.0.0.1:%d/stream", camera.id, camera.port)
 
     started = time.monotonic()
     window_start = started
     analysed_in_window = 0
-    frame_index = 0
-    cap = None
+    last_analysed_id = -1
+    fps_text = "starting..."
 
     try:
         while max_seconds <= 0 or time.monotonic() - started < max_seconds:
-            if cap is None:
-                cap = open_capture(camera.source)
-                if cap is None:
-                    log.warning("camera %s offline, retrying in %ss", camera.id, RECONNECT_DELAY_S)
-                    time.sleep(RECONNECT_DELAY_S)
-                    continue
-                log.info("camera %s opened (source=%s)", camera.id, camera.source)
-
-            ok, frame = cap.read()
-            if not ok:
-                log.warning("camera %s lost, reconnecting in %ss", camera.id, RECONNECT_DELAY_S)
-                cap.release()
-                cap = None
-                time.sleep(RECONNECT_DELAY_S)
+            keyframe = capture.latest_keyframe()
+            if keyframe is None or keyframe.frame_id == last_analysed_id:
+                time.sleep(IDLE_SLEEP_S)  # nothing new yet
                 continue
-
-            frame_index += 1
-            if frame_index % settings.detect_every_n_frames != 0:
-                continue
+            last_analysed_id = keyframe.frame_id
 
             t0 = time.perf_counter()
-            tracks = tracker.track(frame)
+            people = tracker.track(keyframe.image)
             detect_ms = (time.perf_counter() - t0) * 1000
             analysed_in_window += 1
-            log.debug("camera=%s frame=%d persons=%d detect_ms=%.1f", camera.id, frame_index, len(tracks), detect_ms)
 
             now = time.monotonic()
-            if now - window_start >= FPS_REPORT_EVERY_S:
-                fps = analysed_in_window / (now - window_start)
-                print(f"[{camera.id}] analysed FPS={fps:.1f} persons_now={len(tracks)}", flush=True)
-                window_start = now
-                analysed_in_window = 0
+            if now - window_start >= REPORT_EVERY_S:
+                analysed_fps = analysed_in_window / (now - window_start)
+                fps_text = f"analysed {analysed_fps:.1f} fps | camera {capture.camera_fps:.1f} fps"
+                angles = ", ".join(
+                    f"ID {p.track_id}: {torso_angle_deg(p.keypoints):.0f}deg"
+                    for p in people if torso_angle_deg(p.keypoints) is not None
+                )
+                print(f"[{camera.id}] {fps_text} | persons={len(people)} | detect {detect_ms:.0f} ms"
+                      + (f" | torso {angles}" if angles else ""), flush=True)
+                window_start, analysed_in_window = now, 0
+
+            ok, jpeg = cv2.imencode(".jpg", annotate(keyframe.image, people, fps_text),
+                                    [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+            if ok:
+                mjpeg.publish(jpeg.tobytes())
     except KeyboardInterrupt:
         pass
     finally:
-        if cap is not None:
-            cap.release()
+        capture.stop()
+        mjpeg.stop()
     return 0
 
 

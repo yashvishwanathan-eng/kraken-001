@@ -6,8 +6,8 @@ An on-premise system that watches CCTV cameras, turns detections into confirmed 
 Pitch: "Every factory has cameras nobody watches. Most AI adds a dashboard nobody watches. Ours picks up the phone."
 
 ## Team and boundaries
-- I (Kirito) own `backend/`: vision, rules engine, API, database, calls, AI assistant.
-- My teammate owns `frontend/` (React, built with Antigravity, brief in `frontend/BRIEF.md`).
+- I (Kirito) build the full `backend/`: vision, rules engine, API, database, calls, AI assistant.
+- My teammate builds the full `frontend/` (React, built with Antigravity, brief in `frontend/BRIEF.md`). The frontend is combined with the backend last.
 - NEVER create, edit or delete anything in `frontend/`.
 - The API contract is `docs/CONTRACT.md`. It is the single source of truth, shared with the frontend. Never change it silently. If a change is needed, stop and tell me, so the teammate can update `frontend/BRIEF.md` (which points to the contract, not a copy).
 
@@ -20,10 +20,12 @@ Pitch: "Every factory has cameras nobody watches. Most AI adds a dashboard nobod
 6. Secrets only in `.env`; keep `.env.example` updated with empty values.
 7. Every model, dataset, library and external API used gets a line in `docs/disclosures.md` (event rule 9).
 8. Machine: Windows 11, Intel i7-13620H, 16 GB RAM, NO NVIDIA GPU. Never suggest CUDA. Commands in PowerShell.
+9. Learning first: Kirito is new to computer vision and async code. Before building a new concept, explain it in plain words and run a tiny example in the scratchpad (never in the repo). After building, explain what was built and why, file by file.
+10. Branches: day work goes on `claude/festive-clarke-6w890k`. Do not use `main` for day work. Commit locally; ask Kirito before every push and push only on a yes.
 
 ## Stack
 Python 3.11 · FastAPI · Uvicorn · SQLAlchemy 2 · Alembic · PostgreSQL (local) · APScheduler · httpx
-Vision: Ultralytics YOLO (`yolo11n.pt`, `yolo11n-pose.pt`, built-in ByteTrack) · OpenCV · OpenVINO export · FFmpeg
+Vision: Ultralytics YOLO (`yolo11n-pose.pt` for person boxes, track IDs and keypoints; built-in ByteTrack) · OpenCV · OpenVINO export · FFmpeg
 Calls: Twilio voice + WhatsApp (ported from my Bhoomi project) · ngrok for webhooks
 AI: Groq (LLM JSON mode + Whisper) online · Ollama `llama3.2:3b` + faster-whisper offline
 
@@ -41,7 +43,8 @@ backend/
     services/          escalation.py, calls.py, whatsapp.py, assistant.py, llm.py, stt.py, clips.py, permissions.py, audit.py
   worker/
     run_worker.py      one process per camera: python -m worker.run_worker --camera cam-east-wing
-    detectors.py       detect, track, pose, PPE, fire models
+    capture.py         latest-frame capture thread: reads the camera nonstop, keeps only the newest frame and the newest every-Nth keyframe, reconnects every 5 s
+    detectors.py       person detection, tracking and pose (yolo11n-pose), torso angle; PPE and fire models later
     rules.py           all incident rules (pure functions + small state, unit-testable)
     buffer.py          ring buffer + clip writer
     mjpeg.py           annotated MJPEG server on 127.0.0.1:81xx
@@ -60,7 +63,8 @@ docs/
 - Worker serves annotated MJPEG on its own port; `GET /stream/{camera_id}?st=<token>` proxies it (httpx streaming). `/cameras` returns the signed `stream_url`; the token is 1 hour and checked against the user's delegated cameras.
 - Worker confirms an incident, saves clip + snapshot, inserts the row, then calls `POST /internal/incidents/{id}/created` on the API (header `X-Internal-Key`). The API broadcasts it on `/ws/events` and starts escalation.
 - Worker sends `POST /internal/heartbeat` (proposed). If a camera goes silent for 30 s, the API WhatsApps the Admin.
-- Worker reconnects to a lost camera every 5 s and reports status; `/health` shows each camera online/offline + FPS.
+- Latest-frame pattern: the capture thread reads the camera nonstop and overwrites one slot with the newest frame, so frames never queue up behind a slow detector. Detection only ever reads from that slot. Every Nth frame (`detect_every_n_frames`) is also kept as the keyframe that gets analysed. Without this, a slow detector analyses frames that are seconds old.
+- The capture thread reconnects to a lost camera every 5 s and reports online/offline + FPS; `/health` shows each camera.
 - Models load once at startup and run one warm-up frame.
 
 ## API contract
@@ -108,7 +112,7 @@ Routing by severity:
   - If the same zone repeats 3 times within 1 hour, call the Head Guard once for that zone.
 
 Call mechanics:
-- Alert audio is generated BEFORE dialling; the call opens with `<Play>` immediately.
+- Alert text is ready BEFORE dialling. Calls open in English with `<Say>` straight away. Tamil and Hindi are not used at the start of a call.
 - `<Gather input="speech dtmf">`: 1 = going (ack), 2 = false alarm, 3 = connect supervisor, 9 = repeat. Speech mapped to the same 4 intents (keyword match first, short Groq prompt as fallback).
 - Phone acknowledgements (keypad or voice) use the responder linked to the call. They never take the user from the request body.
 - **Critical**: voice and keypad can only ACKNOWLEDGE. Closing needs the dashboard.
@@ -137,6 +141,7 @@ Decisions from the 18 Oct product review, all confirmed. Escalation details are 
    - Commands: call everybody/person/zone; broadcast a message; status report; show camera N; what happened in the last hour; acknowledge or resolve an incident; stop all calls; who has not responded; call the fire station (only when a human orders it); SOP questions.
 6. **Audit log.** Every action records who, what, when, and channel (dashboard, phone or voice). Visible to Admin and Manager.
 7. **Heartbeat.** If a camera or worker goes down for 30 s, WhatsApp the Admin.
+8. **Cloud and training decisions (18–19 Oct, confirmed by Kirito).** Sending short text alerts through cloud services (Twilio, WhatsApp, Groq) is acceptable under the on-premise rule. Video never leaves the laptop. Organisers allow demo access. If that fails at the venue, we switch to the alternatives in the roadmap's risk table. Google Colab is the fallback for training custom PPE and fire/smoke models. Each Colab use gets a line in `docs/disclosures.md`.
 
 Build priority if time runs short: detection, rules and dashboard → roles and delegation → severity routing and escalation → phone commands and roll call → laptop assistant → RAG and wake word.
 
@@ -173,7 +178,7 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Tests: rules engine (fake detections in, expected incidents out) and the assistant filter parser.
 
 ## Current status (update this daily)
-- Day: Sun 18 Oct, Day 1 build
+- Day: Mon 19 Oct, 19 Oct block (capture thread, pose, MJPEG)
 - Done: CLAUDE.md and docs/CONTRACT.md confirmed. Backend skeleton matches the folder structure (routers and services are stubs). `config.py` has every .env key and config value. SQLAlchemy models for Camera, Zone, User, Responder, Incident, TimelineEvent, AuditLog; first Alembic migration applied to local PostgreSQL 16. `GET /health` checks the DB. `config/cameras.yaml` has cam-webcam (source 0) and cam-phone. `worker/run_worker.py` tracks persons with YOLO11n every 3rd frame and prints FPS. pytest: 3 passed. API boots and `/health` returns db ok.
 - Next: PIN login and `/me`, users, cameras and zones endpoints, signed stream URL, then the incident rules.
 - Blockers: not tested with a real webcam or phone camera (sandbox has neither). Test ran on a video file. Run the worker on the Windows laptop before the demo.

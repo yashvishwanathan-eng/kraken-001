@@ -1,9 +1,11 @@
-"""Person detection and tracking with Ultralytics YOLO (built-in ByteTrack).
+"""Person detection, tracking and pose with Ultralytics YOLO11n-pose (built-in ByteTrack).
 
-Models load once per worker process. One warm-up frame runs before the first real frame.
+One model gives, per person: a box, a track ID and 17 body keypoints. Models load once per
+worker process, and one warm-up frame runs before the first real frame.
 """
 
 import logging
+import math
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,17 +18,37 @@ from app.config import BACKEND_DIR
 log = logging.getLogger("safetyai.detectors")
 
 PERSON_CLASS_ID = 0  # COCO class 0 = person
+# COCO keypoint indexes used for the torso
+LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP = 5, 6, 11, 12
+MIN_KEYPOINT_CONF = 0.5
 
 
 @dataclass
-class Track:
+class Person:
     track_id: int
     xyxy: tuple[float, float, float, float]
     confidence: float
+    keypoints: list[tuple[float, float, float]]  # (x, y, conf) for each of 17 points
+
+
+def torso_angle_deg(keypoints: list[tuple[float, float, float]]) -> float | None:
+    """Angle of the shoulder-to-hip line from vertical: 0 = upright, 90 = lying flat.
+
+    Returns None when a shoulder or hip is not clearly visible.
+    """
+    needed = [keypoints[i] for i in (LEFT_SHOULDER, RIGHT_SHOULDER, LEFT_HIP, RIGHT_HIP)]
+    if any(conf < MIN_KEYPOINT_CONF for _, _, conf in needed):
+        return None
+    shoulder_x = (keypoints[LEFT_SHOULDER][0] + keypoints[RIGHT_SHOULDER][0]) / 2
+    shoulder_y = (keypoints[LEFT_SHOULDER][1] + keypoints[RIGHT_SHOULDER][1]) / 2
+    hip_x = (keypoints[LEFT_HIP][0] + keypoints[RIGHT_HIP][0]) / 2
+    hip_y = (keypoints[LEFT_HIP][1] + keypoints[RIGHT_HIP][1]) / 2
+    # Image y grows downward, so only the sideways and vertical parts of the vector matter.
+    return math.degrees(math.atan2(abs(hip_x - shoulder_x), abs(hip_y - shoulder_y)))
 
 
 def ensure_model_file(model_path: str) -> Path:
-    """Return the weights path, downloading yolo11n.pt once if it is missing."""
+    """Return the weights path, downloading the official file once if it is missing."""
     path = Path(model_path)
     if not path.is_absolute():
         path = BACKEND_DIR / path
@@ -34,13 +56,12 @@ def ensure_model_file(model_path: str) -> Path:
         return path
     path.parent.mkdir(parents=True, exist_ok=True)
     log.info("model weights missing, downloading to %s", path)
-    downloaded = YOLO(path.name)  # Ultralytics fetches the official asset into the working directory
+    YOLO(path.name)  # Ultralytics fetches the official asset into the working directory
     shutil.move(Path(path.name).resolve(), path)
-    del downloaded
     return path
 
 
-class PersonTracker:
+class PersonPoseTracker:
     def __init__(self, model_path: str, imgsz: int, conf: float) -> None:
         self.imgsz = imgsz
         self.conf = conf
@@ -51,8 +72,8 @@ class PersonTracker:
         self.track(blank)
         log.info("detector warm-up done")
 
-    def track(self, frame: np.ndarray) -> list[Track]:
-        results = self.model.track(
+    def track(self, frame: np.ndarray) -> list[Person]:
+        result = self.model.track(
             frame,
             classes=[PERSON_CLASS_ID],
             persist=True,
@@ -60,11 +81,17 @@ class PersonTracker:
             imgsz=self.imgsz,
             conf=self.conf,
             verbose=False,
-        )
-        boxes = results[0].boxes
-        if boxes is None or boxes.id is None:
-            return []  # tracker has no IDs yet (first frames)
+        )[0]
+        boxes = result.boxes
+        if boxes is None or boxes.id is None or result.keypoints is None:
+            return []  # no tracked people in this frame (or tracker still warming up)
         ids = boxes.id.int().tolist()
         coords = boxes.xyxy.tolist()
         scores = boxes.conf.tolist()
-        return [Track(track_id=i, xyxy=tuple(c), confidence=s) for i, c, s in zip(ids, coords, scores)]
+        xy = result.keypoints.xy.tolist()
+        kp_conf = result.keypoints.conf.tolist()
+        people = []
+        for i, box, score, points, confs in zip(ids, coords, scores, xy, kp_conf):
+            keypoints = [(x, y, c) for (x, y), c in zip(points, confs)]
+            people.append(Person(track_id=i, xyxy=tuple(box), confidence=score, keypoints=keypoints))
+        return people

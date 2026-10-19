@@ -1,5 +1,5 @@
 from app.config import load_cameras
-from worker.run_worker import parse_source
+from worker.capture import parse_source
 
 
 def test_cameras_yaml_loads_both_cameras():

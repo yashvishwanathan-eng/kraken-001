@@ -3,7 +3,7 @@
 Every model, dataset, library and external API used in SafetyAI is listed here (event rule 9).
 
 ## Models
-- Ultralytics YOLO11n `yolo11n.pt` (AGPL-3.0, Ultralytics): person detection, used by the camera worker. Downloaded once into `backend/models/` (gitignored).
+- Ultralytics YOLO11n-pose `yolo11n-pose.pt` (AGPL-3.0, Ultralytics): person boxes, track IDs and 17 body keypoints, used by the camera worker. Downloaded once into `backend/models/` (gitignored).
 - ByteTrack tracker (MIT), built into Ultralytics: person tracking IDs. Configured as `bytetrack.yaml`.
 
 ## Test data

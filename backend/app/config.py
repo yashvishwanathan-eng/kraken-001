@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # config values (not secrets; defaults match CLAUDE.md)
     cors_origins: list[str] = ["http://localhost:5173"]
     camera_config_path: str = "config/cameras.yaml"
-    yolo_model_path: str = "models/yolo11n.pt"
+    yolo_model_path: str = "models/yolo11n-pose.pt"
     detect_every_n_frames: int = 3
     detect_imgsz: int = 480
     detect_conf: float = 0.5
