@@ -61,6 +61,7 @@ backend/
   media/               clips and snapshots (gitignored)
 docs/
   CONTRACT.md          API contract: endpoints, shapes, incident object, enums, auth rules
+  GUIDE.md             start here: every topic from zero (simple, deeper, where, try it, check yourself) + first full run
   STUDY.md             Kirito's study notes: every concept with a tiny example, updated as we build
   disclosures.md
 ```

@@ -1,5 +1,7 @@
 # Study notes: SafetyAI backend
 
+New to all of this? Read `docs/GUIDE.md` first; it explains every topic from zero. These notes are the next step: the same topics with real code and real outputs.
+
 Written as we build. Each topic has: what it is in plain words, a tiny example with the real
 output we got, where it lives in our code, and a question a judge might ask.
 The tiny examples were run outside the repo; the code is copied here so you can run it yourself:
