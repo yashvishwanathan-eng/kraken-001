@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.config import PRODUCT_NAME, get_settings, media_root
-from app.routers import health, internal
+from app.routers import audit, auth, cameras, events, health, internal, responders, stats, stream, users, zones
 
 settings = get_settings()
 
@@ -18,5 +18,5 @@ app.add_middleware(
 
 app.mount("/media", StaticFiles(directory=media_root()), name="media")
 
-app.include_router(health.router)
-app.include_router(internal.router)
+for module in (health, auth, users, cameras, stream, zones, events, stats, audit, responders, internal):
+    app.include_router(module.router)

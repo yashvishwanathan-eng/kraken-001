@@ -7,6 +7,7 @@ from sqlalchemy import text
 from app.config import get_settings, load_cameras
 from app.db import engine
 from app.schemas import CameraHealth, HealthResponse
+from app.services import camera_status
 
 router = APIRouter()
 log = logging.getLogger("safetyai.health")
@@ -25,7 +26,7 @@ def _check_db() -> Literal["ok", "error"]:
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     settings = get_settings()
-    # Camera online/fps come from worker heartbeats, which are not built yet.
-    cameras = [CameraHealth(id=cam.id, online=False, fps=0.0) for cam in load_cameras()]
+    cameras = [CameraHealth(id=cam.id, online=online, fps=fps)
+               for cam in load_cameras() for online, fps in [camera_status.get(cam.id)]]
     twilio = "not_configured" if not (settings.twilio_account_sid and settings.twilio_auth_token) else "not_checked"
     return HealthResponse(cameras=cameras, db=_check_db(), twilio=twilio, llm="not_checked")

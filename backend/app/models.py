@@ -115,3 +115,17 @@ class AuditLog(Base):
     target: Mapped[str | None] = mapped_column(String(120), nullable=True)
     channel: Mapped[str] = mapped_column(String(16))  # dashboard, phone, voice
     detail: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+
+class Session(Base):
+    """One row per logged-in browser. Only a SHA-256 hash of the token is stored, never the token."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship()

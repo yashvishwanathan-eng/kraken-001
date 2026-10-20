@@ -11,7 +11,8 @@ from sqlalchemy.orm import selectinload
 from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Incident
-from app.schemas import IncidentOut, OkResponse
+from app.schemas import HeartbeatIn, IncidentOut, OkResponse
+from app.services import camera_status
 from app.ws import manager
 
 router = APIRouter(prefix="/internal", tags=["internal"])
@@ -40,4 +41,11 @@ async def incident_created(incident_id: int) -> OkResponse:
     sent = await manager.broadcast(incident.model_dump(mode="json"))
     # Escalation (calls, WhatsApp) starts here once services/escalation.py is built (22 Oct).
     log.info("incident=%d step=broadcast clients=%d ms=%.1f", incident_id, sent, (time.perf_counter() - t0) * 1000)
+    return OkResponse(ok=True)
+
+
+@router.post("/heartbeat", response_model=OkResponse, dependencies=[Depends(require_internal_key)])
+def heartbeat(body: HeartbeatIn) -> OkResponse:
+    """Worker says: my camera is online/offline at this FPS. No heartbeat for 30 s = offline."""
+    camera_status.update(body.camera_id, body.online, body.fps)
     return OkResponse(ok=True)

@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 from ultralytics import YOLO
 
-from app.config import BACKEND_DIR
+from app.config import BACKEND_DIR, get_settings
 
 log = logging.getLogger("safetyai.detectors")
 
@@ -69,11 +69,25 @@ def ensure_model_file(model_path: str) -> Path:
     return path
 
 
+def load_model(model_path: str, task: str) -> YOLO:
+    """Load weights once. Prefer the OpenVINO export next to them if it exists (same results, faster on Intel).
+
+    Make the export with:  yolo export model=models/yolo11n-pose.pt format=openvino imgsz=480
+    """
+    weights = ensure_model_file(model_path)
+    openvino_dir = weights.with_name(f"{weights.stem}_openvino_model")
+    if get_settings().prefer_openvino and openvino_dir.is_dir():
+        log.info("using OpenVINO model %s", openvino_dir.name)
+        return YOLO(str(openvino_dir), task=task)
+    log.info("using PyTorch model %s (export to OpenVINO for about 2x speed)", weights.name)
+    return YOLO(str(weights), task=task)
+
+
 class PersonPoseTracker:
     def __init__(self, model_path: str, imgsz: int, conf: float) -> None:
         self.imgsz = imgsz
         self.conf = conf
-        self.model = YOLO(str(ensure_model_file(model_path)))
+        self.model = load_model(model_path, task="pose")
 
     def warm_up(self) -> None:
         blank = np.zeros((self.imgsz, self.imgsz, 3), dtype=np.uint8)
@@ -122,7 +136,7 @@ class BagDetector:
     def __init__(self, model_path: str, imgsz: int, conf: float) -> None:
         self.imgsz = imgsz
         self.conf = conf
-        self.model = YOLO(str(ensure_model_file(model_path)))
+        self.model = load_model(model_path, task="detect")
 
     def warm_up(self) -> None:
         self.detect(np.zeros((self.imgsz, self.imgsz, 3), dtype=np.uint8))

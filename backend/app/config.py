@@ -29,12 +29,15 @@ class Settings(BaseSettings):
     ollama_model: str = ""
     offline_mode: bool = False
     media_dir: str = "media"
+    stream_secret: str = ""  # signs stream URLs; if empty, a random one is made at startup (URLs die on restart)
+    demo_user_pins: str = ""  # "anita=1111,vikram=2222,..." used only by python -m app.seed
 
     # config values (not secrets; defaults match CLAUDE.md)
     cors_origins: list[str] = ["http://localhost:5173"]
     camera_config_path: str = "config/cameras.yaml"
     yolo_model_path: str = "models/yolo11n-pose.pt"
     bag_model_path: str = "models/yolo11n.pt"  # plain detector, used only for backpack/handbag/suitcase
+    prefer_openvino: bool = True  # use models/<name>_openvino_model/ when it exists (about 2x faster on Intel CPUs)
     detect_every_n_frames: int = 3
     detect_imgsz: int = 480
     detect_conf: float = 0.5
@@ -48,6 +51,10 @@ class Settings(BaseSettings):
     critical_admin_delay_s: int = 60
     stream_token_ttl_s: int = 3600
     api_base_url: str = "http://127.0.0.1:8000"  # where workers send /internal calls
+    session_ttl_h: float = 12.0  # a login lasts one shift
+    login_max_failures: int = 5  # wrong PINs allowed per client per window before 429
+    login_window_s: float = 60.0
+    worker_heartbeat_s: float = 5.0  # how often a worker reports online/fps to the API
 
     # incident rule thresholds (CLAUDE.md "Incident rules")
     incident_cooldown_s: float = 60.0

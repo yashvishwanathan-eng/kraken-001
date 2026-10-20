@@ -24,6 +24,7 @@ from app.models import Zone
 from worker.buffer import RingBuffer
 from worker.capture import LatestFrameCapture
 from worker.detectors import BagDetector, Person, PersonPoseTracker, hip_y, torso_angle_deg
+from worker.heartbeat import HeartbeatSender
 from worker.incidents import IncidentReporter
 from worker.mjpeg import MjpegServer
 from worker.rules import BagObs, PersonObs, RuleConfig, RulesEngine, ZoneDef
@@ -92,6 +93,8 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     reporter = IncidentReporter(camera.id, settings, ring)
     mjpeg = MjpegServer(camera.port).start()
     capture = LatestFrameCapture(source, settings.detect_every_n_frames, on_frame=ring.add).start()
+    live = {"fps": 0.0}  # analysed fps, read by the heartbeat thread
+    heartbeat = HeartbeatSender(camera.id, settings, lambda: (capture.online, live["fps"])).start()
     log.info("camera %s: %d zones, stream on http://127.0.0.1:%d/stream", camera.id, len(zones), camera.port)
 
     started = time.monotonic()
@@ -130,6 +133,7 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
             analysed_in_window += 1
             if now - window_start >= REPORT_EVERY_S:
                 analysed_fps = analysed_in_window / (now - window_start)
+                live["fps"] = analysed_fps
                 fps_text = f"analysed {analysed_fps:.1f} fps | camera {capture.camera_fps:.1f} fps"
                 print(f"[{camera.id}] {fps_text} | persons={len(people)} | detect {detect_ms:.0f} ms", flush=True)
                 window_start, analysed_in_window = now, 0
@@ -147,6 +151,7 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     except KeyboardInterrupt:
         pass
     finally:
+        heartbeat.stop()
         capture.stop()
         mjpeg.stop()
     return 0

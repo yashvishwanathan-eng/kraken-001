@@ -8,7 +8,7 @@ save it as a `.py` file and run `python file.py` inside the backend venv.
 Contents
 - Part 1 (19 Oct): video and detection — frames and FPS, the latest-frame thread, YOLO results, tracking IDs, pose and torso angle, MJPEG, tokens
 - Part 2 (20 Oct, Gate 1): rules and incidents — zones and the feet point, rules as timers, cooldown, night window, the five rules, ring buffer and clips, the incident flow, tests
-- Part 3 (21 Oct, Gate 2): login, roles and the API — added when built
+- Part 3 (Gate 2, built 20 Oct): login, roles and the API — PIN hashing, tokens, Depends, camera scope, signed URLs, WebSocket, idempotent ack, audit and heartbeat, OpenVINO, PPE/fire model options
 - Commands for your Windows laptop
 
 ---
@@ -339,6 +339,201 @@ Roadmap deadline: decide by 21 Oct; fallback is the best public model with its l
 
 ---
 
+## Part 3 (Gate 2): login, roles and the API
+
+### 3.1 PIN hashing with bcrypt
+**Plain words.** We never store a PIN. We store a **hash**: a one-way scramble. bcrypt adds a random
+**salt**, so the same PIN gives a different hash every time, and it is **slow on purpose** (~70 ms).
+That is nothing for one login, but makes guessing all 10,000 four-digit PINs take minutes.
+```python
+import time, bcrypt
+h1 = bcrypt.hashpw(b"1234", bcrypt.gensalt(rounds=10))
+h2 = bcrypt.hashpw(b"1234", bcrypt.gensalt(rounds=10))
+print(h1[:20], h2[:20])                       # different: each has its own salt
+t = time.perf_counter(); ok = bcrypt.checkpw(b"1234", h1)
+print(ok, f"{(time.perf_counter() - t) * 1000:.0f} ms")
+print(bcrypt.checkpw(b"9999", h1))
+```
+Output: two different hashes, `True 70 ms`, `False`.
+Login is by PIN alone, so the server checks the PIN against each active user's hash, and PINs must be
+unique (creating a user with a PIN that is already used returns 409).
+**Plus a rate limit:** 5 wrong PINs within a minute from one machine gives 429 for the rest of the minute.
+**Where.** `hash_pin`, `verify_pin`, `find_user_by_pin` in `app/services/permissions.py`; `app/routers/auth.py`.
+
+### 3.2 Opaque tokens and the sessions table
+**Plain words.** After login the browser gets a random token (1.7). The database keeps only the
+token's **SHA-256 hash** plus who it belongs to and when it expires (12 h, one shift). If someone
+copied the database, the hashes are useless as tokens.
+```python
+import hashlib, secrets
+token = secrets.token_urlsafe(32)
+stored = hashlib.sha256(token.encode()).hexdigest()
+print(hashlib.sha256(token.encode()).hexdigest() == stored)   # True: the lookup works
+```
+Because tokens live in a table, they can be cancelled at once: resetting a user's PIN or deactivating
+them deletes their sessions, and their old token gets 401 on the next request (tested).
+**Where.** `create_session`, `user_for_token`, `end_sessions` in `app/services/permissions.py`;
+the `sessions` table in `app/models.py` (migration `bb69bf3cd2ac`).
+
+### 3.3 FastAPI `Depends`: 401 vs 403
+**Plain words.** `Depends(x)` means "run `x` before this endpoint and hand me its result".
+We use it to answer two questions before any endpoint runs:
+- **Who are you?** No or bad token → **401** ("log in first").
+- **May you do this?** Logged in, but your actions list lacks it → **403** ("not allowed").
+```python
+from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi.testclient import TestClient
+
+USERS = {"tok-admin": {"name": "Anita", "actions": {"resolve"}}, "tok-guard": {"name": "Suresh", "actions": set()}}
+app = FastAPI()
+
+def current_user(authorization: str = Header(default="")):
+    user = USERS.get(authorization.removeprefix("Bearer "))
+    if user is None: raise HTTPException(401, "log in first")
+    return user
+
+def require(action):
+    def check(user=Depends(current_user)):
+        if action not in user["actions"]: raise HTTPException(403, f"not allowed: {action}")
+        return user
+    return check
+
+@app.post("/events/1/resolve")
+def resolve(user=Depends(require("resolve"))):
+    return {"resolved_by": user["name"]}
+
+c = TestClient(app)
+for label, headers in [("no token", {}), ("guard", {"Authorization": "Bearer tok-guard"}),
+                       ("admin", {"Authorization": "Bearer tok-admin"})]:
+    r = c.post("/events/1/resolve", headers=headers); print(label, r.status_code, r.json())
+```
+Output: `no token 401`, `guard 403`, `admin 200 {'resolved_by': 'Anita'}`.
+**Permissions are data.** The code checks *actions*, never role names. Admin sees every camera
+because their actions include `all_cameras`. A new role needs no code change, only a row.
+**Where.** `app/deps.py`; the action list `ACTIONS` in `app/services/permissions.py`.
+
+### 3.4 Camera scope in every query
+**Plain words.** Every list query adds "only cameras this user may see":
+`WHERE camera_id IN (user's cameras)`, unless they have `all_cameras`. It is done in the database
+query, not by hiding things in the dashboard, so a Guard calling the API directly still sees only
+their cameras (roadmap test: "including through the API directly").
+Asking for one incident on a camera you cannot see gives **404, not 403**: 403 would tell you it exists.
+**Where.** `allowed_cameras()` and `can_see()` in `app/services/permissions.py`; used in
+`app/routers/events.py`, `cameras.py`, `zones.py`, `stats.py`, and the WebSocket filter.
+
+### 3.5 Signed stream URLs (HMAC)
+**Plain words.** An `<img>` tag cannot send a login header, so the permission rides inside the URL:
+`/stream/cam-webcam?st=<user>.<expiry>.<signature>`. The signature is an **HMAC**: a fingerprint of
+"user + camera + expiry" made with a secret only the server knows (`STREAM_SECRET` in `.env`).
+Change any part and the fingerprint no longer matches.
+```python
+import hashlib, hmac, time
+SECRET = b"server-only-secret"
+def sign(user_id, camera_id, exp):
+    msg = f"{user_id}.{camera_id}.{exp}".encode()
+    return f"{user_id}.{exp}." + hmac.new(SECRET, msg, hashlib.sha256).hexdigest()[:32]
+def check(st, camera_id, now):
+    user_id, exp, sig = st.split(".")
+    good = hmac.new(SECRET, f"{user_id}.{camera_id}.{exp}".encode(), hashlib.sha256).hexdigest()[:32]
+    if not hmac.compare_digest(sig, good): return "401 bad signature"
+    if now > int(exp): return "401 expired"
+    return f"200 ok for user {user_id}"
+now = int(time.time()); st = sign(7, "cam-webcam", now + 3600)
+print(check(st, "cam-webcam", now), "|", check(st, "cam-phone", now), "|",
+      check(st, "cam-webcam", now + 7200), "|", check(st.replace("7.", "1.", 1), "cam-webcam", now))
+```
+Output: `200 ok for user 7 | 401 bad signature | 401 expired | 401 bad signature`.
+`hmac.compare_digest` compares in constant time, so timing cannot leak the right signature.
+The API then checks the user is still active and still has that camera, and **proxies** the worker's
+local stream (workers listen on 127.0.0.1 only; the proxy is the only way in).
+**Where.** `sign_stream_token`, `check_stream_token` in `app/services/permissions.py`; `app/routers/stream.py`.
+
+### 3.6 The WebSocket: live updates without polling
+**Plain words.** A normal request is "ask, get an answer, hang up". A **WebSocket** stays open, so the
+server can push the moment something happens. Each dashboard opens one to `/ws/events?token=...`
+(the token goes in the query because browsers cannot set headers on a WebSocket). A bad token closes
+it with code 4401. Each connection remembers the user's cameras and only receives those incidents.
+
+**Gotcha we hit.** Uvicorn can only serve WebSockets if a WebSocket library is installed. The test
+client does not need it, so all tests passed while a real server would have refused the connection.
+We found it in the live check and added `websockets` to `requirements.txt`. Lesson: always run the
+real server once, not only the tests (CLAUDE.md rule 4).
+**Where.** `app/ws.py` (manager), `ws_events()` in `app/routers/events.py`.
+
+### 3.7 Idempotent acknowledge, and the bug the tests caught
+**Plain words.** **Idempotent** = doing it twice has the same effect as once. A guard may click
+"Acknowledge" twice, or a phone keypress may arrive twice. The second ack must not add a second
+timeline entry. Two safeguards:
+- `SELECT ... FOR UPDATE` (a **row lock**): while one request is acknowledging incident 12, a second
+  request for 12 waits, then sees it is already acknowledged and changes nothing.
+- Acknowledging or resolving a **closed** incident returns 409.
+
+**The bug.** The first version added the new timeline row with `db.add(...)`. The database got it, but
+the incident object already in memory still had its old timeline list, so the response (and the
+WebSocket update) did not show the acknowledgement. The test
+`test_ack_is_idempotent_and_audited` caught it. Fix: `incident.timeline.append(...)`, which updates
+the list in memory and the database together.
+**Where.** `_ack()` and `_resolve()` in `app/routers/events.py`.
+
+### 3.8 Audit log and heartbeat
+**Audit.** Every action writes `{who, what, when, target, channel}` **in the same transaction** as
+the change, so both are saved or neither is. Logged today: login, failed login, ack, resolve,
+false alarm, user/zone/responder changes. Phone and voice actions will use `channel="phone"`/`"voice"`.
+**Where.** `app/services/audit.py`; read with `GET /audit-log` (Admin, Manager).
+
+**Heartbeat.** Each worker posts "online, N analysed fps" every 5 s. The API keeps the latest in memory.
+If none arrives for 30 s (worker crashed, laptop asleep), the camera shows offline. Later the same
+silence will WhatsApp the Admin.
+**Where.** `worker/heartbeat.py`, `POST /internal/heartbeat`, `app/services/camera_status.py`.
+
+### 3.9 OpenVINO, and the PPE / fire model options
+**OpenVINO** is Intel's engine for running models on Intel CPUs (your i7-13620H is one). We export
+the same model once; the worker uses the export automatically when it exists.
+```python
+import pathlib, statistics, time, cv2, ultralytics
+from ultralytics import YOLO
+frame = cv2.imread(str(pathlib.Path(ultralytics.__file__).parent / "assets" / "bus.jpg"))
+for label, path in [("PyTorch", "models/yolo11n-pose.pt"), ("OpenVINO", "models/yolo11n-pose_openvino_model")]:
+    model = YOLO(path, task="pose"); model.track(frame, persist=True, imgsz=480, classes=[0], verbose=False)
+    times = []
+    for _ in range(40):
+        t = time.perf_counter(); r = model.track(frame, persist=True, imgsz=480, classes=[0], verbose=False)[0]
+        times.append((time.perf_counter() - t) * 1000)
+    print(label, f"{statistics.median(times):.1f} ms", len(r.boxes), "people")
+```
+Output on the 4-core sandbox: **PyTorch 49.2 ms, OpenVINO 25.4 ms**, both found 3 people.
+Measure it again on your laptop: those numbers go on the "measured speed" slide.
+
+**PPE and fire/smoke models: options found on 20 Oct (not chosen, not downloaded).** The licence is
+your decision. What the search found:
+- Ready YOLO weights for hard hats and fire exist, but most listings found do **not state a licence**
+  (e.g. YOLOv8n hard-hat models on Hugging Face), and one fire model is **AGPL-3.0**
+  (thalos-fire-safety-v1). Treat "no licence stated" as not cleared.
+- Clearly licensed **datasets** exist, which point to training our own on Colab (the agreed fallback):
+  a hard-hat dataset on Roboflow Universe listed as Public Domain, the D-Fire fire/smoke dataset
+  (21,000+ images in YOLO format; the authors ask for a citation), and an 11,027-image fire/smoke set
+  from Central Queensland University under CC BY 4.0.
+Next step, your call: pick datasets, train YOLO11n on Colab, export to OpenVINO, add each to
+`docs/disclosures.md`. Sources:
+[Hard Hat dataset (Roboflow)](https://universe.roboflow.com/yolo-road-trial/hard-hat-sample-rrphy),
+[YOLOv8n hard-hat listing](https://www.promptlayer.com/models/yolov8n-hard-hat-detection),
+[YOLOv8n FASDD fire model](https://huggingface.co/Blaize-AI/YOLOv8n_FASDD),
+[thalos fire safety model](https://huggingface.co/thalostech2025/thalos-fire-safety-v1),
+[CQU fire and smoke dataset](https://researchdata.edu.au/annotated-fire-smoke-using-yolo/false).
+
+### 3.10 Testing the API
+- `TestClient(app)` calls the API in-process: no server needed, very fast.
+- Database tests use the separate `safetyai_test` database (2.7), seeded with the 4 demo users.
+- `tests/test_api_gate2.py` checks every rule that matters for security: 401 vs 403, a Guard sees
+  only cam-webcam (list, detail, stats, WebSocket), PIN is never returned, PIN reset logs out,
+  rate limit, signed stream tokens, ack is idempotent and audited, bad input gives 422.
+- Then one **live run** on a real server (because of 3.6): Guard logs in, opens the WebSocket, the
+  worker detects the zone walk, the incident arrives live 8.6 s after the worker started (including
+  ~4 s of model loading), `/cameras` shows online at 5.0 fps, the stream plays through the proxy,
+  ack arrives back on the WebSocket, and the audit log shows it.
+
+---
+
 ## Commands for your Windows laptop (PowerShell, from `backend\`)
 ```powershell
 # once: FFmpeg on PATH (needed for clips), then reopen PowerShell
@@ -348,9 +543,14 @@ ffmpeg -version
 # after every pull: install anything new (tzdata gives Windows the IST time zone)
 pip install -r requirements.txt
 
-# database: migrate, then load cameras and zones
+# database: migrate, then load cameras, zones and the 4 demo users
+# (first put DEMO_USER_PINS=anita=1111,vikram=2222,ravi=3333,suresh=4444 and a STREAM_SECRET in .env)
 alembic upgrade head
 python -m app.seed
+
+# once: OpenVINO exports (about 2x faster on your Intel CPU); the worker picks them up by itself
+yolo export model=models/yolo11n-pose.pt format=openvino imgsz=480
+yolo export model=models/yolo11n.pt format=openvino imgsz=480
 
 # once: the test database (pytest uses it; your real data is never touched)
 psql -U postgres -c "CREATE DATABASE safetyai_test OWNER <your db user>;"

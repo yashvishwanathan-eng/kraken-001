@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from pathlib import PurePath
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, PlainSerializer, field_serializer
+from pydantic import BaseModel, Field, PlainSerializer, field_serializer
 
 from app import models
 
@@ -90,3 +90,152 @@ class IncidentOut(BaseModel):
 
 class OkResponse(BaseModel):
     ok: bool
+
+
+# ---------- auth and users ----------
+
+Pin = Annotated[str, Field(pattern=r"^\d{4,8}$", description="4 to 8 digits")]
+
+
+class PinLogin(BaseModel):
+    pin: Pin
+
+
+class UserBrief(BaseModel):
+    id: int
+    name: str
+    role: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: UserBrief
+
+
+class MeResponse(BaseModel):
+    id: int
+    name: str
+    role: str
+    camera_ids: list[str]
+    actions: list[str]
+
+
+class UserOut(BaseModel):
+    id: int
+    name: str
+    role: str
+    camera_ids: list[str]
+    actions: list[str]
+    active: bool
+
+
+class UserCreate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+    role: Annotated[str, Field(min_length=1, max_length=32)]
+    camera_ids: list[str] = []
+    actions: list[str] = []
+    active: bool = True
+    pin: Pin
+
+
+class UserUpdate(BaseModel):
+    """Every field optional: send only what changes. Sending `pin` resets it."""
+    name: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    role: Annotated[str, Field(min_length=1, max_length=32)] | None = None
+    camera_ids: list[str] | None = None
+    actions: list[str] | None = None
+    active: bool | None = None
+    pin: Pin | None = None
+
+
+# ---------- cameras and zones ----------
+
+ZoneKind = Literal["restricted", "ppe", "work"]
+Fraction = Annotated[float, Field(ge=0.0, le=1.0)]
+
+
+class ZoneOut(BaseModel):
+    id: int
+    camera_id: str
+    name: str
+    kind: ZoneKind
+    polygon: list[tuple[float, float]]
+    max_people: int | None
+
+
+class ZoneIn(BaseModel):
+    camera_id: Annotated[str, Field(min_length=1, max_length=64)]
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+    kind: ZoneKind
+    polygon: Annotated[list[tuple[Fraction, Fraction]], Field(min_length=3, max_length=50)]
+    max_people: Annotated[int, Field(ge=1)] | None = None
+
+
+class CameraOut(BaseModel):
+    id: str
+    name: str
+    stream_url: str
+    online: bool
+    fps: float
+    zones: list[ZoneOut]
+
+
+class StreamUrlResponse(BaseModel):
+    stream_url: str
+
+
+# ---------- events and stats ----------
+
+class ResolveIn(BaseModel):
+    outcome: Literal["resolved", "false_alarm"]
+    note: Annotated[str, Field(max_length=500)] | None = None
+
+
+class DayCount(BaseModel):
+    date: str  # YYYY-MM-DD in IST
+    count: int
+
+
+class StatsOut(BaseModel):
+    by_type: dict[str, int]
+    by_day: list[DayCount]
+    open: int
+    resolved: int
+    avg_response_s: float | None
+
+
+class AuditRow(BaseModel):
+    at: UtcDatetime
+    user: str
+    action: str
+    target: str | None
+    channel: Literal["dashboard", "phone", "voice"]
+
+
+# ---------- responders ----------
+
+HhMm = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", description="HH:MM, 24-hour")]
+
+
+class ResponderIn(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+    phone: Annotated[str, Field(pattern=r"^\+[1-9]\d{7,14}$", description="E.164, e.g. +919876543210")]
+    language: Literal["en", "ta", "hi"] = "en"
+    zone: Annotated[str, Field(min_length=1, max_length=120)]
+    shift_start: HhMm
+    shift_end: HhMm
+    call_order: Annotated[int, Field(ge=1, le=99)] = 1
+    active: bool = True
+
+
+class ResponderOut(ResponderIn):
+    id: int
+
+
+# ---------- worker heartbeat ----------
+
+class HeartbeatIn(BaseModel):
+    camera_id: Annotated[str, Field(min_length=1, max_length=64)]
+    fps: Annotated[float, Field(ge=0)]
+    online: bool
+    ts: datetime

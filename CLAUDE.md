@@ -39,9 +39,10 @@ backend/
     models.py          SQLAlchemy models
     schemas.py         Pydantic models (mirror docs/CONTRACT.md exactly)
     ws.py              WebSocket connection manager
+    deps.py            FastAPI dependencies: current_user (401) and require(action) (403)
     seed.py            python -m app.seed: loads cameras.yaml + zones.yaml (+ demo users) into the database; safe to rerun
     routers/           health, cameras, stream, events, zones, responders, broadcast, assistant, stats, twilio, internal, auth, users, roll_call, audit
-    services/          escalation.py, calls.py, whatsapp.py, assistant.py, llm.py, stt.py, clips.py, permissions.py, audit.py
+    services/          escalation.py, calls.py, whatsapp.py, assistant.py, llm.py, stt.py, clips.py, permissions.py (PINs, sessions, camera scope, stream tokens), audit.py, camera_status.py (heartbeats)
   worker/
     run_worker.py      one process per camera: python -m worker.run_worker --camera cam-east-wing
     capture.py         latest-frame capture thread: reads the camera nonstop, keeps only the newest frame and the newest every-Nth keyframe, reconnects every 5 s
@@ -49,12 +50,14 @@ backend/
     rules.py           all incident rules (pure functions + small state, unit-testable)
     buffer.py          ring buffer + clip writer
     incidents.py       stores a confirmed incident (row, timeline, snapshot), notifies the API, writes the clip 5 s later
+    heartbeat.py       posts online + analysed FPS to /internal/heartbeat every 5 s
     mjpeg.py           annotated MJPEG server on 127.0.0.1:81xx
   config/cameras.yaml  cameras: id, name, source (0, http://PHONE-IP:8080/video, file path, rtsp://), port
   config/zones.yaml    demo zones per camera; polygon points are fractions of the frame (0..1); max_people for crowding
+  config/demo_users.yaml  the 4 demo users (role, cameras, actions); PINs come from DEMO_USER_PINS in .env
   alembic/
   tests/               conftest.py points tests at a separate `<db>_test` database
-  models/              model weights (gitignored)
+  models/              model weights + OpenVINO exports (gitignored); workers use <name>_openvino_model/ when present
   media/               clips and snapshots (gitignored)
 docs/
   CONTRACT.md          API contract: endpoints, shapes, incident object, enums, auth rules
@@ -93,6 +96,8 @@ See `docs/CONTRACT.md`. Endpoints, request and response shapes, the incident obj
 - `DIGEST_TIME=18:00` IST. Daily digest of low-severity incidents.
 - `HEARTBEAT_TIMEOUT_S=30`.
 - `STREAM_TOKEN_TTL_S=3600` (signed stream URL lifetime).
+- `SESSION_TTL_H=12` (a login lasts one shift). `LOGIN_MAX_FAILURES=5` per `LOGIN_WINDOW_S=60`.
+- `PREFER_OPENVINO=true` (use the OpenVINO export when it exists; about 2x faster on Intel CPUs).
 - `LOW_REPEAT_COUNT=3`, `LOW_REPEAT_WINDOW_MIN=60`.
 - `CRITICAL_ADMIN_DELAY_S=60` (critical: admin is called after the head guard has had 60 s).
 
@@ -160,12 +165,13 @@ python -m app.seed
 uvicorn app.main:app --reload --port 8000
 python -m worker.run_worker --camera cam-webcam
 pytest
-yolo export model=models/yolo11n.pt format=openvino
+yolo export model=models/yolo11n-pose.pt format=openvino imgsz=480
+yolo export model=models/yolo11n.pt format=openvino imgsz=480
 ngrok http 8000
 ```
 
 ## .env keys
-DATABASE_URL, INTERNAL_KEY, PUBLIC_BASE_URL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, WHATSAPP_API_URL, WHATSAPP_TOKEN, GROQ_API_KEY, GROQ_MODEL, GROQ_STT_MODEL, OLLAMA_URL, OLLAMA_MODEL, OFFLINE_MODE, MEDIA_DIR
+DATABASE_URL, INTERNAL_KEY, PUBLIC_BASE_URL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, WHATSAPP_API_URL, WHATSAPP_TOKEN, GROQ_API_KEY, GROQ_MODEL, GROQ_STT_MODEL, OLLAMA_URL, OLLAMA_MODEL, OFFLINE_MODE, MEDIA_DIR, STREAM_SECRET, DEMO_USER_PINS
 
 ## Speed targets
 Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s · incident to phone ringing < 15 s · typed answer about 2 s online · spoken answer about 4 s online · offline answer < 8 s.
@@ -183,7 +189,8 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Tests: rules engine (fake detections in, expected incidents out) and the assistant filter parser.
 
 ## Current status (update this daily)
-- Day: Tue 20 Oct, Gate 1 (rules and incidents)
+- Day: Tue 20 Oct, Gate 1 and Gate 2 (Gate 2 done a day early)
 - Done: 19 Oct: latest-frame capture thread, yolo11n-pose tracking with torso angle, MJPEG per camera. 20 Oct (Gate 1): zones in the database (`config/zones.yaml` + `python -m app.seed`); rules engine with access, loitering, crowding, fall, unattended bag, 60 s cooldown, night window; ring buffer + 10 s H.264 clip via FFmpeg; snapshot; incident stored and the API told via `/internal/incidents/{id}/created`, which broadcasts on the WebSocket manager. Gate 1 check passed on a test video: access incident in the database with snapshot and clip. pytest: 33 passed, using a separate test database.
-- Next: Gate 2 (21 Oct): PIN login with opaque tokens, users and delegation, `/me`, `/cameras` with signed stream URLs, `/stream`, `/zones`, `/events`, ack/resolve, `/stats`, `/ws/events` per user, audit log.
-- Blockers: no PPE or fire/smoke model yet (decide by 21 Oct). Not tested with a real webcam or phone camera (sandbox has neither).
+- Done (Gate 2): PIN login with opaque tokens (hashed, 12 h) and a 5-per-minute limit; 4 demo users from `config/demo_users.yaml`; `/me`, `/users`, `/cameras` with signed stream URLs, `/stream` proxy, `/zones`, `/events`, ack (idempotent) and resolve, `/stats`, `/audit-log`, `/responders`; `/ws/events?token=` filtered per user; audit row on every action; worker heartbeats make `/health` and `/cameras` live; OpenVINO exports used automatically (pose model 49 -> 25 ms per frame on the sandbox CPU). Live check on a real server passed: Guard got the incident on the WebSocket, saw only cam-webcam, streamed it through the proxy, acknowledged it, and the update arrived live. pytest: 55 passed.
+- Next: escalation and calls (22 Oct): severity ladders with timers, Twilio calls, keypad/speech, WhatsApp, heartbeat WhatsApp, daily digest. Needs Twilio and WhatsApp credentials in `.env`.
+- Blockers: PPE and fire/smoke model not chosen (licence decision for Kirito; candidates in docs/STUDY.md 3.9). Proposed contract clarifications P1-P10 need sign-off. Not tested with a real webcam or phone camera.

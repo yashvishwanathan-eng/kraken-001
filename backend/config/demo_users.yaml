@@ -1,0 +1,28 @@
+# Demo users, loaded by:  python -m app.seed
+# PINs are NOT here (no secrets in git). They come from DEMO_USER_PINS in .env, e.g.
+#   DEMO_USER_PINS=anita=1111,vikram=2222,ravi=3333,suresh=4444
+# A user with no PIN there gets a random one, printed once by the seed command.
+#
+# role is only a label shown on screen. What a user can do comes from `actions`;
+# which cameras they see comes from `cameras` (or every camera with the all_cameras action).
+users:
+  - key: anita
+    name: Anita Rao
+    role: Admin
+    cameras: []
+    actions: [all_cameras, ack, resolve, manage_users, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant]
+  - key: vikram
+    name: Vikram Shah
+    role: Manager
+    cameras: [cam-webcam, cam-phone]
+    actions: [ack, resolve, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant]
+  - key: ravi
+    name: Ravi Kumar
+    role: Head Guard
+    cameras: [cam-webcam, cam-phone]
+    actions: [ack, resolve, alert_all, broadcast, assistant]
+  - key: suresh
+    name: Suresh Babu
+    role: Guard
+    cameras: [cam-webcam]
+    actions: [ack]
