@@ -47,6 +47,14 @@ def torso_angle_deg(keypoints: list[tuple[float, float, float]]) -> float | None
     return math.degrees(math.atan2(abs(hip_x - shoulder_x), abs(hip_y - shoulder_y)))
 
 
+def hip_y(keypoints: list[tuple[float, float, float]]) -> float | None:
+    """Height of the hip midpoint in pixels (bigger = lower in the image). None if hips are hidden."""
+    left, right = keypoints[LEFT_HIP], keypoints[RIGHT_HIP]
+    if left[2] < MIN_KEYPOINT_CONF or right[2] < MIN_KEYPOINT_CONF:
+        return None
+    return (left[1] + right[1]) / 2
+
+
 def ensure_model_file(model_path: str) -> Path:
     """Return the weights path, downloading the official file once if it is missing."""
     path = Path(model_path)
@@ -95,3 +103,36 @@ class PersonPoseTracker:
             keypoints = [(x, y, c) for (x, y), c in zip(points, confs)]
             people.append(Person(track_id=i, xyxy=tuple(box), confidence=score, keypoints=keypoints))
         return people
+
+
+# COCO class ids for the unattended-bag rule
+BAG_CLASSES = {24: "backpack", 26: "handbag", 28: "suitcase"}
+
+
+@dataclass
+class Bag:
+    xyxy: tuple[float, float, float, float]
+    label: str
+    confidence: float
+
+
+class BagDetector:
+    """Plain YOLO11n detector limited to bag classes. Run about once a second: bags barely move."""
+
+    def __init__(self, model_path: str, imgsz: int, conf: float) -> None:
+        self.imgsz = imgsz
+        self.conf = conf
+        self.model = YOLO(str(ensure_model_file(model_path)))
+
+    def warm_up(self) -> None:
+        self.detect(np.zeros((self.imgsz, self.imgsz, 3), dtype=np.uint8))
+
+    def detect(self, frame: np.ndarray) -> list[Bag]:
+        boxes = self.model.predict(frame, classes=list(BAG_CLASSES), imgsz=self.imgsz, conf=self.conf,
+                                   verbose=False)[0].boxes
+        if boxes is None:
+            return []
+        return [
+            Bag(xyxy=tuple(box), label=BAG_CLASSES[int(cls)], confidence=score)
+            for box, cls, score in zip(boxes.xyxy.tolist(), boxes.cls.tolist(), boxes.conf.tolist())
+        ]

@@ -39,6 +39,7 @@ backend/
     models.py          SQLAlchemy models
     schemas.py         Pydantic models (mirror docs/CONTRACT.md exactly)
     ws.py              WebSocket connection manager
+    seed.py            python -m app.seed: loads cameras.yaml + zones.yaml (+ demo users) into the database; safe to rerun
     routers/           health, cameras, stream, events, zones, responders, broadcast, assistant, stats, twilio, internal, auth, users, roll_call, audit
     services/          escalation.py, calls.py, whatsapp.py, assistant.py, llm.py, stt.py, clips.py, permissions.py, audit.py
   worker/
@@ -47,14 +48,17 @@ backend/
     detectors.py       person detection, tracking and pose (yolo11n-pose), torso angle; PPE and fire models later
     rules.py           all incident rules (pure functions + small state, unit-testable)
     buffer.py          ring buffer + clip writer
+    incidents.py       stores a confirmed incident (row, timeline, snapshot), notifies the API, writes the clip 5 s later
     mjpeg.py           annotated MJPEG server on 127.0.0.1:81xx
   config/cameras.yaml  cameras: id, name, source (0, http://PHONE-IP:8080/video, file path, rtsp://), port
+  config/zones.yaml    demo zones per camera; polygon points are fractions of the frame (0..1); max_people for crowding
   alembic/
-  tests/
+  tests/               conftest.py points tests at a separate `<db>_test` database
   models/              model weights (gitignored)
   media/               clips and snapshots (gitignored)
 docs/
   CONTRACT.md          API contract: endpoints, shapes, incident object, enums, auth rules
+  STUDY.md             Kirito's study notes: every concept with a tiny example, updated as we build
   disclosures.md
 ```
 
@@ -152,6 +156,7 @@ Frontend: all of the above is confirmed in `docs/CONTRACT.md`. The teammate upda
 py -3.11 -m venv .venv ; .venv\Scripts\activate
 pip install -r requirements.txt
 alembic upgrade head
+python -m app.seed
 uvicorn app.main:app --reload --port 8000
 python -m worker.run_worker --camera cam-webcam
 pytest
@@ -178,7 +183,7 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Tests: rules engine (fake detections in, expected incidents out) and the assistant filter parser.
 
 ## Current status (update this daily)
-- Day: Mon 19 Oct, 19 Oct block (capture thread, pose, MJPEG)
-- Done: CLAUDE.md and docs/CONTRACT.md confirmed. Backend skeleton matches the folder structure (routers and services are stubs). `config.py` has every .env key and config value. SQLAlchemy models for Camera, Zone, User, Responder, Incident, TimelineEvent, AuditLog; first Alembic migration applied to local PostgreSQL 16. `GET /health` checks the DB. `config/cameras.yaml` has cam-webcam (source 0) and cam-phone. `worker/run_worker.py` tracks persons with YOLO11n every 3rd frame and prints FPS. pytest: 3 passed. API boots and `/health` returns db ok.
-- Next: PIN login and `/me`, users, cameras and zones endpoints, signed stream URL, then the incident rules.
-- Blockers: not tested with a real webcam or phone camera (sandbox has neither). Test ran on a video file. Run the worker on the Windows laptop before the demo.
+- Day: Tue 20 Oct, Gate 1 (rules and incidents)
+- Done: 19 Oct: latest-frame capture thread, yolo11n-pose tracking with torso angle, MJPEG per camera. 20 Oct (Gate 1): zones in the database (`config/zones.yaml` + `python -m app.seed`); rules engine with access, loitering, crowding, fall, unattended bag, 60 s cooldown, night window; ring buffer + 10 s H.264 clip via FFmpeg; snapshot; incident stored and the API told via `/internal/incidents/{id}/created`, which broadcasts on the WebSocket manager. Gate 1 check passed on a test video: access incident in the database with snapshot and clip. pytest: 33 passed, using a separate test database.
+- Next: Gate 2 (21 Oct): PIN login with opaque tokens, users and delegation, `/me`, `/cameras` with signed stream URLs, `/stream`, `/zones`, `/events`, ack/resolve, `/stats`, `/ws/events` per user, audit log.
+- Blockers: no PPE or fire/smoke model yet (decide by 21 Oct). Not tested with a real webcam or phone camera (sandbox has neither).
