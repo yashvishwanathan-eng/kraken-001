@@ -33,3 +33,9 @@ def get(camera_id: str) -> tuple[bool, float]:
 def clear() -> None:
     with _lock:
         _status.clear()
+
+
+def known_cameras() -> list[str]:
+    """Cameras that have sent at least one heartbeat since the API started."""
+    with _lock:
+        return list(_status)

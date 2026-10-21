@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     media_dir: str = "media"
     stream_secret: str = ""  # signs stream URLs; if empty, a random one is made at startup (URLs die on restart)
     demo_user_pins: str = ""  # "anita=1111,vikram=2222,..." used only by python -m app.seed
+    demo_responder_phones: str = ""  # "anita=+9198...,ravi=+9198..." used only by python -m app.seed
+    fire_station_number: str = ""  # only ever dialled when a human orders it and says "yes"
+    site_address: str = ""  # read to the fire station on that call, e.g. "Plot 12, Hosur Road, Bengaluru"
+    ppe_model_path: str = ""  # helmet/vest model (.pt); empty = PPE rule off until a model is chosen
+    fire_model_path: str = ""  # fire/smoke model (.pt); empty = fire rule off until a model is chosen
 
     # config values (not secrets; defaults match CLAUDE.md)
     cors_origins: list[str] = ["http://localhost:5173"]
@@ -55,6 +60,40 @@ class Settings(BaseSettings):
     login_max_failures: int = 5  # wrong PINs allowed per client per window before 429
     login_window_s: float = 60.0
     worker_heartbeat_s: float = 5.0  # how often a worker reports online/fps to the API
+
+    # calls and messages: "auto" = live when the keys are set, otherwise off; "simulate" = log only, for demos
+    calls_mode: str = "auto"  # auto, live, simulate, off
+    whatsapp_mode: str = "auto"  # auto, live, simulate, off
+    twilio_cps: float = 1.0  # Twilio places about 1 new call per second by default
+    call_ring_timeout_s: int = 30
+    call_language: str = "en-IN"
+    critical_manager_delay_s: int = 120
+    high_manager_delay_s: int = 60
+    role_admin: str = "Admin"  # role labels the call ladder looks for
+    role_manager: str = "Manager"
+    role_head_guard: str = "Head Guard"
+    role_guard: str = "Guard"
+    share_link_ttl_h: float = 24.0  # signed snapshot links sent on WhatsApp
+    heartbeat_check_s: int = 10
+    digest_lookback_h: int = 24
+    broadcast_max_mb: float = 5.0
+    voice_max_mb: float = 10.0
+
+    # AI assistant
+    llm_timeout_s: float = 5.0  # Groq
+    ollama_timeout_s: float = 10.0
+    ollama_default_model: str = "llama3.2:3b"
+    whisper_offline_model: str = "small"
+    assistant_confirm_ttl_s: int = 60
+    assistant_max_rows: int = 50
+    knowledge_dir: str = "knowledge"
+
+    # PPE and fire models (labels differ between models, so they are configurable)
+    ppe_helmet_labels: str = "helmet,hardhat,hard-hat"
+    ppe_vest_labels: str = "vest,safety-vest,safety vest"
+    fire_labels: str = "fire,smoke"
+    ppe_missing_frames: int = 10
+    fire_frames: int = 5
 
     # incident rule thresholds (CLAUDE.md "Incident rules")
     incident_cooldown_s: float = 60.0

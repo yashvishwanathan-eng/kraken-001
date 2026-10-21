@@ -7,9 +7,14 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - Ultralytics YOLO11n `yolo11n.pt` (AGPL-3.0, Ultralytics): backpack, handbag and suitcase detection for the unattended-bag rule, about once a second.
 - ByteTrack tracker (MIT), built into Ultralytics: person tracking IDs. Configured as `bytetrack.yaml`.
 - OpenVINO exports of both models (`*_openvino_model/`), made locally with `yolo export`; same weights, same licence.
+- Llama 3.2 3B (`llama3.2:3b`, Meta, Llama 3.2 Community License), run locally by Ollama: offline fallback for the assistant.
+- Whisper "small" (OpenAI, MIT) in the faster-whisper format (`Systran/faster-whisper-small`, MIT), downloaded on first offline use: offline speech to text.
+- Groq-hosted models (chosen in `.env`: `GROQ_MODEL` for questions/commands, `GROQ_STT_MODEL` for speech): fill in the exact model names and their licences once chosen.
+- PPE and fire/smoke models: not chosen yet. Add the model and its training dataset, each with its licence, when chosen.
 
 ## Test data
 - `bus.jpg` sample image shipped inside the Ultralytics package (AGPL-3.0): converted to a short local test video to check detection. The video is not committed.
+- `backend/knowledge/SAMPLE-sop.md`: an invented sample SOP written for this project, used only to demonstrate SOP answers. Replace with the site's real SOPs.
 
 ## Libraries (backend, in use)
 - FastAPI (MIT): HTTP API framework.
@@ -26,7 +31,9 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - Ultralytics (AGPL-3.0): YOLO inference and tracking.
 - lap (BSD-2-Clause): linear assignment solver used by the tracker.
 - OpenCV (Apache-2.0), installed by Ultralytics: camera capture and frame handling.
-- APScheduler (MIT): background scheduling (declared; not yet used).
+- APScheduler (MIT): call-ladder timers, the 18:00 digest and the camera heartbeat check.
+- python-multipart (Apache-2.0): reads form posts (Twilio webhooks) and file uploads (broadcast audio, voice questions).
+- faster-whisper (MIT) with CTranslate2 (MIT): offline speech to text.
 - tzdata (Apache-2.0): time zone data so IST works on Windows.
 - pytest (MIT): tests.
 
@@ -34,7 +41,8 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - PostgreSQL 16 (PostgreSQL licence), local on the event laptop.
 - FFmpeg (LGPL-2.1+/GPL depending on build; we call the `ffmpeg` command, libx264 is GPL-2.0): re-encodes incident clips to H.264 MP4.
 
-## Planned (not yet used, add when integrated)
-- Twilio voice and WhatsApp API
-- Groq API (LLM and Whisper)
-- Ollama `llama3.2:3b`, faster-whisper "small"
+- Twilio Programmable Voice (cloud API, Twilio's terms of service): alert, roll-call and broadcast phone calls. Only short call instructions and phone numbers leave the laptop; never video.
+- WhatsApp Business API (Meta WhatsApp Cloud API format, to be replaced by the provider used in Kirito's Bhoomi project): alert text and a 24-hour snapshot link.
+- Groq API (cloud): turns typed/spoken questions into a filter, picks commands, answers SOP questions from our documents, and speech to text. Only the question text (or voice clip) is sent.
+- Ollama (MIT): runs the offline language model on the laptop.
+- ngrok (service): gives the laptop a public address so Twilio can reach the webhooks; only `/twilio/*` and `/share/*` answer through it.

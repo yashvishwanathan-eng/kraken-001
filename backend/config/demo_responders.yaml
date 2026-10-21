@@ -1,0 +1,31 @@
+# Demo call roster, loaded by:  python -m app.seed
+# Phone numbers are NOT here. They come from DEMO_RESPONDER_PHONES in .env, keyed by `user`, e.g.
+#   DEMO_RESPONDER_PHONES=anita=+919800000001,vikram=+919800000002,ravi=+919800000003,suresh=+919800000004
+# Anyone without a phone there is skipped, so nobody is called by accident.
+# On a Twilio trial account, only numbers verified in the Twilio console can be called.
+# Shifts are IST, HH:MM; 00:00 to 00:00 means on shift all day (handy for the demo).
+responders:
+  - user: anita
+    name: Anita Rao
+    zone: control-room
+    shift_start: "00:00"
+    shift_end: "00:00"
+    call_order: 1
+  - user: vikram
+    name: Vikram Shah
+    zone: loading-bay
+    shift_start: "00:00"
+    shift_end: "00:00"
+    call_order: 1
+  - user: ravi
+    name: Ravi Kumar
+    zone: server-room-door
+    shift_start: "00:00"
+    shift_end: "00:00"
+    call_order: 1
+  - user: suresh
+    name: Suresh Babu
+    zone: assembly-line
+    shift_start: "00:00"
+    shift_end: "00:00"
+    call_order: 2

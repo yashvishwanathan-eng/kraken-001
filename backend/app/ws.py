@@ -3,8 +3,16 @@
 Each dashboard holds one open connection. When something changes, the API calls broadcast()
 and every connected dashboard gets the message at once: no polling. Each connection carries
 a filter so a user only receives incidents from their delegated cameras.
+
+Two kinds of message go out:
+- an incident object (has "camera_id"): only users who can see that camera receive it;
+- a notice with a "kind" key ("alert_all", "roll_call"): every logged-in dashboard receives it.
+
+Escalation runs on timer threads, not in the web server's event loop, so it uses
+publish_from_thread(), which hands the message to the event loop safely.
 """
 
+import asyncio
 import logging
 from collections.abc import Callable
 
@@ -18,6 +26,14 @@ MessageFilter = Callable[[dict], bool]
 class ConnectionManager:
     def __init__(self) -> None:
         self._clients: dict[WebSocket, MessageFilter] = {}
+        self.loop: asyncio.AbstractEventLoop | None = None  # set when the API starts
+
+    def publish_from_thread(self, message: dict) -> None:
+        """Broadcast from a non-async thread (escalation timers, call dispatcher)."""
+        if self.loop is None or self.loop.is_closed():
+            log.debug("no event loop yet; message not pushed: %s", message.get("kind") or message.get("id"))
+            return
+        asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
 
     async def connect(self, websocket: WebSocket, allow: MessageFilter) -> None:
         await websocket.accept()

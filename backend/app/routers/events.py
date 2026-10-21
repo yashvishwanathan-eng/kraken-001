@@ -5,31 +5,26 @@ answers 404, not 403, so its existence is not leaked.
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
-from sqlalchemy.orm import Session as DbSession, selectinload
+from sqlalchemy.orm import selectinload
 
 from app.db import SessionLocal
 from app.deps import current_user, require
-from app.models import Incident, TimelineEvent, User
+from app.models import Incident, User
 from app.schemas import IncidentOut, IncidentType, ResolveIn, Severity, Status
-from app.services.audit import record
+from app.services import incidents as incident_ops
+from app.services.escalation import escalation
 from app.services.permissions import allowed_cameras, can_see, user_for_token
 from app.ws import manager
 
 router = APIRouter(tags=["events"])
 log = logging.getLogger("safetyai.events")
 
-CLOSED = {"resolved", "false_alarm"}
 WS_UNAUTHORISED = 4401  # WebSocket close code: bad or missing token
-
-
-def _load(db: DbSession, incident_id: int, lock: bool = False) -> Incident | None:
-    return db.get(Incident, incident_id, with_for_update=lock,
-                  options=[selectinload(Incident.timeline), selectinload(Incident.camera)])
 
 
 @router.get("/events", response_model=list[IncidentOut])
@@ -63,7 +58,7 @@ def list_events(
 @router.get("/events/{incident_id}", response_model=IncidentOut)
 def get_event(incident_id: int, user: User = Depends(current_user)) -> IncidentOut:
     with SessionLocal() as db:
-        incident = _load(db, incident_id)
+        incident = incident_ops.load(db, incident_id)
         if incident is None or not can_see(user, incident.camera_id):
             raise HTTPException(status_code=404, detail=f"incident {incident_id} not found")
         return IncidentOut.from_model(incident)
@@ -72,22 +67,19 @@ def get_event(incident_id: int, user: User = Depends(current_user)) -> IncidentO
 def _ack(incident_id: int, user: User) -> tuple[IncidentOut, bool]:
     """Acknowledge from the dashboard. Repeating it changes nothing (idempotent)."""
     with SessionLocal() as db:
-        incident = _load(db, incident_id, lock=True)  # row lock: two clicks cannot both acknowledge
+        incident = incident_ops.load(db, incident_id, lock=True)  # row lock: two clicks cannot both acknowledge
         if incident is None or not can_see(user, incident.camera_id):
             raise HTTPException(status_code=404, detail=f"incident {incident_id} not found")
-        if incident.status == "acknowledged":
-            return IncidentOut.from_model(incident), False
-        if incident.status in CLOSED:
-            raise HTTPException(status_code=409, detail=f"incident {incident_id} is already {incident.status}")
-        now = datetime.now(timezone.utc)
-        incident.status = "acknowledged"
-        incident.acknowledged_by, incident.acknowledged_by_user_id = user.name, user.id
-        # append to the loaded list (not db.add) so the response below includes the new entry
-        incident.timeline.append(TimelineEvent(at=now, action="acknowledged", actor=user.name, via="dashboard"))
-        record(db, user, "ack", target=f"incident:{incident.id}")
+        try:
+            changed = incident_ops.acknowledge(db, incident, name=user.name, user=user, via="dashboard",
+                                               channel="dashboard")
+        except incident_ops.IncidentClosed as closed:
+            raise HTTPException(status_code=409, detail=f"incident {incident_id} is already {closed}")
         db.commit()
-        # Stopping the call ladder on acknowledgement is added with escalation (22 Oct).
-        return IncidentOut.from_model(incident), True
+        result = IncidentOut.from_model(incident)
+    if changed:
+        escalation.stop(incident_id)  # no more calls once someone has it
+    return result, changed
 
 
 @router.post("/events/{incident_id}/ack", response_model=IncidentOut)
@@ -100,18 +92,18 @@ async def ack_event(incident_id: int, user: User = Depends(require("ack"))) -> I
 
 def _resolve(incident_id: int, body: ResolveIn, user: User) -> IncidentOut:
     with SessionLocal() as db:
-        incident = _load(db, incident_id, lock=True)
+        incident = incident_ops.load(db, incident_id, lock=True)
         if incident is None or not can_see(user, incident.camera_id):
             raise HTTPException(status_code=404, detail=f"incident {incident_id} not found")
-        if incident.status in CLOSED:
-            raise HTTPException(status_code=409, detail=f"incident {incident_id} is already {incident.status}")
-        incident.status = body.outcome
-        incident.timeline.append(TimelineEvent(at=datetime.now(timezone.utc), action=body.outcome,
-                                               actor=user.name, via="dashboard"))
-        record(db, user, body.outcome, target=f"incident:{incident.id}",
-               detail={"note": body.note} if body.note else None)
+        try:
+            incident_ops.close(db, incident, body.outcome, name=user.name, user=user, via="dashboard",
+                               channel="dashboard", note=body.note)
+        except incident_ops.IncidentClosed as closed:
+            raise HTTPException(status_code=409, detail=f"incident {incident_id} is already {closed}")
         db.commit()
-        return IncidentOut.from_model(incident)
+        result = IncidentOut.from_model(incident)
+    escalation.stop(incident_id)
+    return result
 
 
 @router.post("/events/{incident_id}/resolve", response_model=IncidentOut)
@@ -138,7 +130,9 @@ async def ws_events(websocket: WebSocket, token: str = "") -> None:
         await websocket.close(code=WS_UNAUTHORISED, reason="log in first")
         return
     scope = allowed_cameras(user)
-    await manager.connect(websocket, lambda message: scope is None or message.get("camera_id") in scope)
+    # incidents: only delegated cameras; notices (alert_all, roll_call) carry no camera_id and go to everyone
+    await manager.connect(websocket, lambda message: scope is None or "camera_id" not in message
+                          or message["camera_id"] in scope)
     try:
         while True:
             await websocket.receive_text()  # the dashboard may send pings; we only listen to keep it open

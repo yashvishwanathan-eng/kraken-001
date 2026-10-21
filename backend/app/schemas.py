@@ -239,3 +239,91 @@ class HeartbeatIn(BaseModel):
     fps: Annotated[float, Field(ge=0)]
     online: bool
     ts: datetime
+
+
+# ---------- alert everybody, roll call, broadcast ----------
+
+class AlertAllIn(BaseModel):
+    message: Annotated[str, Field(min_length=1, max_length=500)]
+    incident_id: int | None = None
+
+
+class AlertAllOut(BaseModel):
+    kind: Literal["alert_all"]
+    roll_call_id: int
+    incident_id: int | None
+    message: str
+    by: str
+    at: str
+    recipients: int
+    whatsapp_sent: int
+    calls_queued: int
+
+
+class RollCallGuard(BaseModel):
+    id: int
+    name: str
+    status: Literal["pending", "responding", "safe", "not_reached"]
+
+
+class RollCallOut(BaseModel):
+    roll_call_id: int
+    incident_id: int | None
+    message: str
+    total: int
+    responding: int
+    safe: int
+    not_reached: int
+    guards: list[RollCallGuard]
+
+
+class BroadcastOut(BaseModel):
+    zone: str
+    recipients: list[str]
+    queued: int
+    calls_mode: str
+
+
+# ---------- AI assistant ----------
+
+AnswerSource = Literal["groq", "ollama", "keywords"]
+
+
+class AssistantQueryIn(BaseModel):
+    question: Annotated[str, Field(min_length=1, max_length=500)]
+
+
+class AssistantAnswer(BaseModel):
+    answer: str
+    incidents: list[IncidentOut]
+    source: AnswerSource
+    ms: int
+
+
+class AssistantVoiceAnswer(AssistantAnswer):
+    transcript: str
+
+
+class CommandIn(BaseModel):
+    text: Annotated[str, Field(min_length=1, max_length=500)]
+
+
+class CommandOut(BaseModel):
+    intent: str
+    status: Literal["done", "needs_confirmation", "unknown", "refused"]
+    answer: str
+    confirm_token: str | None
+    ms: int
+    data: dict
+
+
+class ConfirmIn(BaseModel):
+    confirm_token: Annotated[str, Field(min_length=1, max_length=100)]
+    confirmed: bool
+
+
+class ConfirmOut(BaseModel):
+    status: Literal["done", "refused"]
+    answer: str
+    ms: int
+    data: dict

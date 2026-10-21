@@ -48,19 +48,19 @@ Status tags:
 | GET | /events/{id} | live | | Incident object with `timeline`. |
 | POST | /events/{id}/ack | live | No body. The user comes from the token. | Changed from body `{by}`. Phone acknowledgements use the responder linked to the call. |
 | POST | /events/{id}/resolve | live | `{outcome: "resolved" \| "false_alarm", note}` | Critical incidents cannot be resolved by voice or keypad. Dashboard only. |
-| WS | /ws/events | live | | Sends full incident objects on create and update. Extra messages `alert_all` and roll-call updates are confirmed (shape TBD, not built yet). |
+| WS | /ws/events | live | | Sends full incident objects on create and update. Extra notices `alert_all` and `roll_call` are live; shape in proposed clarification P11. |
 | GET, POST, PUT | /zones | live | Polygons per camera | Response shape as in `/cameras` zones. |
 | GET, POST, PUT, DELETE | /responders | live | `{id,name,phone,language,zone,shift_start,shift_end,call_order,active}` | Responder role and camera group come from `/users`. |
-| POST | /broadcast | confirmed | multipart: `zone`, `audio` file | Response shape not yet defined. |
-| GET | /roll-call | confirmed | Query: `incident_id` | `{total, responding, safe, not_reached, guards:[{id,name,status}]}`. `status`: pending, responding, safe, not_reached. |
-| POST | /alerts/all | confirmed | `{message}` | WhatsApp to all on-shift guards, red banner on every dashboard, parallel calls (about 1 new call per second, Twilio default). |
-| POST | /assistant/query | confirmed | `{question}` | `{answer, incidents[], source:"groq" \| "ollama", ms}` |
-| POST | /assistant/voice | confirmed | multipart audio | `{transcript, answer, incidents[], source, ms}` |
-| POST | /assistant/command | confirmed | `{text}` | `{intent, status, answer, confirm_token, ms}`. `status`: done, needs_confirmation, unknown. |
-| POST | /assistant/confirm | confirmed | `{confirm_token, confirmed}` | `{status, answer, ms}`. Only confirms the big actions: call everyone, evacuate, call fire station. |
+| POST | /broadcast | live | multipart: `zone`, `audio` file | See proposed clarification P14. |
+| GET | /roll-call | live | Query: `incident_id` | `{total, responding, safe, not_reached, guards:[{id,name,status}]}`. `status`: pending, responding, safe, not_reached. |
+| POST | /alerts/all | live | `{message}` | WhatsApp to all on-shift guards, red banner on every dashboard, parallel calls (about 1 new call per second, Twilio default). |
+| POST | /assistant/query | live | `{question}` | `{answer, incidents[], source:"groq" \| "ollama", ms}` |
+| POST | /assistant/voice | live | multipart audio | `{transcript, answer, incidents[], source, ms}` |
+| POST | /assistant/command | live | `{text}` | `{intent, status, answer, confirm_token, ms}`. `status`: done, needs_confirmation, unknown. |
+| POST | /assistant/confirm | live | `{confirm_token, confirmed}` | `{status, answer, ms}`. Only confirms the big actions: call everyone, evacuate, call fire station. |
 | GET | /audit-log | live | Query: user, action, channel (dashboard, phone, voice), from, to | Rows `{at, user, action, target, channel}`, newest first. Admin and Manager only. |
 | GET | /stats | live | | `{by_type:{...}, by_day:[{date,count}], open, resolved, avg_response_s}` |
-| POST | /twilio/voice, /twilio/gather, /twilio/status | confirmed | Twilio webhooks | Twilio only. TwiML responses. |
+| POST | /twilio/voice, /twilio/gather, /twilio/status | live | Twilio webhooks | Twilio only. TwiML responses. |
 | POST | /internal/incidents/{id}/created | live | Header `X-Internal-Key` | Worker to API only. |
 | POST | /internal/heartbeat | live | Header `X-Internal-Key`; `{camera_id, fps, online, ts}` | Worker to API only, every 5 s. Silence over 30 s = offline in `/health` and `/cameras`. The admin WhatsApp on silence comes with WhatsApp (22 Oct). |
 
@@ -87,8 +87,8 @@ Status tags:
 - `status`: open, acknowledged, resolved, false_alarm
 - `channel`: dashboard, phone, voice
 - Timeline `action`:
-  - **(live)**: detected, acknowledged, resolved, false_alarm
-  - **(confirmed, not built yet)**: call_placed, call_no_answer, escalated, whatsapp_sent, roll_call_responded, roll_call_safe, alert_all, command
+  - **(live)**: detected, call_placed, call_no_answer, escalated, whatsapp_sent, acknowledged, resolved, false_alarm, roll_call_responded, roll_call_safe, alert_all
+  - **(confirmed, not used yet)**: command
 - Timeline `via` (on acknowledged): keypad, voice, dashboard
 
 ## DB indexes
@@ -107,8 +107,19 @@ Gate 2 needed these details, which the contract did not settle. The backend does
 - **P8. Actions.** The values `actions[]` can hold: `all_cameras`, `ack`, `resolve`, `manage_users`, `view_audit`, `manage_zones`, `manage_responders`, `alert_all`, `broadcast`, `assistant`.
 - **P9. /me.** For a user with `all_cameras`, `camera_ids` lists every camera.
 - **P10. Responders.** `phone` in E.164 (`+919876543210`). `language`: en, ta, hi. `shift_start` and `shift_end` as `HH:MM` (24-hour, IST). Any logged-in user can read; changes need `manage_responders`.
+- **P11. WebSocket notices.** Besides incident objects (which have `camera_id`), `/ws/events` sends notices with a `kind` key, to every logged-in dashboard:
+  - `{"kind":"alert_all","roll_call_id","incident_id","message","by","at","recipients","whatsapp_sent","calls_queued"}`: show the red banner.
+  - `{"kind":"roll_call","roll_call_id","incident_id","message","total","responding","safe","not_reached","guards":[{id,name,status}]}`: refresh the roll-call board.
+- **P12. Alert everybody.** `POST /alerts/all` body `{message, incident_id?}` (incident optional). Response: the `alert_all` notice above. 404 if `incident_id` does not exist.
+- **P13. Roll call.** `GET /roll-call` with `incident_id` gives that incident's latest roll call; without it, the latest roll call. 404 if none. The response also carries `roll_call_id`, `incident_id`, `message`; `guards[].id` is the responder id. A guard who hangs up without pressing 1 or 2 counts as `not_reached`.
+- **P14. Broadcast.** `POST /broadcast` multipart `zone` + `audio` (MP3 or WAV, up to 5 MB). Calls every on-shift responder whose zone matches and plays the audio. Response `{zone, recipients[], queued, calls_mode}`.
+- **P15. Assistant.** `source` can also be `keywords` (no language model available; the built-in keyword parser answered). `/assistant/command` and `/assistant/confirm` responses add `data` (e.g. `{"camera_id"}` for "show camera N", `{"incident_ids"}` for a question, `{"roll_call_id"}` after alert everybody). Command `status` can also be `refused` (not allowed, or nothing to act on). `/assistant/confirm` answers 404 when the token is unknown, expired (60 s), already used, or belongs to another user. `/assistant/voice` answers 422 for non-audio or silence, 503 when no speech-to-text is available.
+- **P16. Share links.** `GET /share/media/{name}?st=...` serves one snapshot or broadcast file to WhatsApp or Twilio (signed, 24 h). The dashboard does not use it.
+- **P17. Public address.** When the API is reached through `PUBLIC_BASE_URL` (ngrok), only `/twilio/*` and `/share/*` answer; everything else is 404 there. The dashboard always uses the local address.
+- **P18. Health.** `twilio` is `ok` when the Twilio keys and public URL are set, else `not_configured`. `llm` is `ok` when Groq is set up, `ollama_only` when only Ollama is, `not_checked` when neither is.
 
 ## Changelog
 - 18 Oct: added the endpoints above. `POST /events/{id}/ack` no longer takes `by`.
 - 18 Oct: confirmed by Kirito: the nine endpoints, the timeline actions, the extra WebSocket messages, and the signed stream URL with `GET /cameras/{id}/stream-url`. Stream tokens are 1 hour, one camera each.
+- 21 Oct (later): escalation, Twilio webhooks, alert everybody, roll call, broadcast and the assistant are live. Proposed clarifications P11 to P18 added for sign-off.
 - 21 Oct: status tags now mean built (live) vs agreed (confirmed). Gate 2 endpoints are live. Tokens are opaque (hashed in the database, 12 h). 403 is in use. Proposed clarifications P1 to P10 added for sign-off.

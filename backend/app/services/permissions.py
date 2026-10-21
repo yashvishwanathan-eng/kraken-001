@@ -136,3 +136,30 @@ def stream_url(user_id: int, camera_id: str) -> str:
 
 if not get_settings().stream_secret:
     log.warning("STREAM_SECRET is not set; using a random one, so stream URLs stop working after a restart")
+
+
+# ---------- signed share links (snapshots on WhatsApp, broadcast audio for Twilio) ----------
+
+def _share_sig(name: str, exp: int) -> str:
+    return hmac.new(_stream_secret(), f"share.{name}.{exp}".encode(), hashlib.sha256).hexdigest()[:STREAM_SIG_LEN]
+
+
+def sign_share(name: str) -> str:
+    """Token for /share/media/<name>: lets an outside service (WhatsApp, Twilio) fetch one file for a while."""
+    exp = int(time.time() + get_settings().share_link_ttl_h * 3600)
+    return f"{exp}.{_share_sig(name, exp)}"
+
+
+def check_share(name: str, st: str) -> bool:
+    try:
+        exp_text, sig = st.split(".")
+        exp = int(exp_text)
+    except ValueError:
+        return False
+    return hmac.compare_digest(sig, _share_sig(name, exp)) and time.time() <= exp
+
+
+def share_url(name: str) -> str | None:
+    """Full public link to a media file, or None when PUBLIC_BASE_URL is not set."""
+    base = get_settings().public_base_url.rstrip("/")
+    return f"{base}/share/media/{name}?st={sign_share(name)}" if base else None

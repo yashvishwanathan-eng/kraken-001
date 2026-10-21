@@ -8,6 +8,7 @@ config/demo_users.yaml. Demo PINs come from DEMO_USER_PINS in .env (never from g
 
 import logging
 import secrets
+from datetime import time
 from pathlib import Path
 
 import yaml
@@ -16,13 +17,14 @@ from sqlalchemy.orm import Session
 
 from app.config import BACKEND_DIR, get_settings, load_cameras
 from app.db import SessionLocal
-from app.models import Camera, User, Zone
+from app.models import Camera, Responder, User, Zone
 from app.services.permissions import ACTIONS, hash_pin, verify_pin
 
 log = logging.getLogger("safetyai.seed")
 
 ZONES_FILE = BACKEND_DIR / "config" / "zones.yaml"
 USERS_FILE = BACKEND_DIR / "config" / "demo_users.yaml"
+RESPONDERS_FILE = BACKEND_DIR / "config" / "demo_responders.yaml"
 
 
 def seed_cameras(db: Session) -> int:
@@ -81,6 +83,32 @@ def seed_users(db: Session, users_file: Path = USERS_FILE, pins: dict[str, str] 
     return lines
 
 
+def _hhmm(value: str) -> time:
+    hours, minutes = value.split(":")
+    return time(int(hours), int(minutes))
+
+
+def seed_responders(db: Session, responders_file: Path = RESPONDERS_FILE,
+                    phones: dict[str, str] | None = None) -> list[str]:
+    """Phone roster for the call ladder. Phones come from DEMO_RESPONDER_PHONES in .env; anyone without a
+    phone there is skipped (so nobody is ever called by accident). Returns lines to print."""
+    phones = parse_pins(get_settings().demo_responder_phones) if phones is None else phones
+    raw = yaml.safe_load(responders_file.read_text(encoding="utf-8")) or {}
+    lines = []
+    for item in raw.get("responders", []):
+        phone = phones.get(item["user"])
+        user = db.scalar(select(User).where(User.name == item["name"]))
+        if not phone:
+            lines.append(f"{item['name']}: no phone in DEMO_RESPONDER_PHONES, not on the call roster")
+            continue
+        row = db.scalar(select(Responder).where(Responder.name == item["name"])) or Responder(name=item["name"])
+        row.phone, row.language, row.zone = phone, item.get("language", "en"), item["zone"]
+        row.shift_start, row.shift_end = _hhmm(item["shift_start"]), _hhmm(item["shift_end"])
+        row.call_order, row.active, row.user_id = item.get("call_order", 1), True, user.id if user else None
+        db.add(row)
+    return lines
+
+
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     with SessionLocal() as db:
@@ -88,8 +116,10 @@ def main() -> None:
         db.flush()  # cameras must exist before zones point at them
         zones = seed_zones(db)
         pin_lines = seed_users(db)
+        db.flush()  # users must exist before responders link to them
+        pin_lines += seed_responders(db)
         db.commit()
-    log.info("seeded %d cameras, %d zones and the demo users", cameras, zones)
+    log.info("seeded %d cameras, %d zones, the demo users and the call roster", cameras, zones)
     for line in pin_lines:
         print(line)
 

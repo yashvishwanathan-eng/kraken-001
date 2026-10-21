@@ -59,6 +59,8 @@ class Responder(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
+    user: Mapped[User | None] = relationship()  # gives the role and cameras used by the call ladder
+
 
 class Incident(Base):
     __tablename__ = "incidents"
@@ -129,3 +131,44 @@ class Session(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship()
+
+
+class RollCall(Base):
+    """One "alert everybody": every on-shift guard is messaged and called and answers 1 (responding) or 2 (safe)."""
+
+    __tablename__ = "roll_calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True,
+                                                    index=True)
+    message: Mapped[str] = mapped_column(String(500))
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    started_by: Mapped[str] = mapped_column(String(120))
+    channel: Mapped[str] = mapped_column(String(16))  # dashboard, phone, voice
+
+
+class Call(Base):
+    """One phone call we asked Twilio to place (alert ladder, roll call, broadcast or a direct call)."""
+
+    __tablename__ = "calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    call_sid: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True)  # Twilio's id, once placed
+    kind: Mapped[str] = mapped_column(String(16))  # alert, roll_call, broadcast, direct
+    incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True,
+                                                    index=True)
+    roll_call_id: Mapped[int | None] = mapped_column(ForeignKey("roll_calls.id", ondelete="CASCADE"), nullable=True,
+                                                     index=True)
+    responder_id: Mapped[int | None] = mapped_column(ForeignKey("responders.id", ondelete="SET NULL"), nullable=True)
+    to_name: Mapped[str] = mapped_column(String(120))
+    to_phone: Mapped[str] = mapped_column(String(32))
+    message: Mapped[str | None] = mapped_column(String(500), nullable=True)  # what <Say> reads (roll call, direct)
+    audio_file: Mapped[str | None] = mapped_column(String(255), nullable=True)  # what <Play> plays (broadcast)
+    status: Mapped[str] = mapped_column(String(16), default="queued")  # queued, ringing, in-progress, completed,
+    # no-answer, busy, failed, canceled, simulated, skipped
+    response: Mapped[str | None] = mapped_column(String(16), nullable=True)  # ack, false_alarm, responding, safe
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
+                                                 onupdate=func.now())
+
+    responder: Mapped[Responder | None] = relationship()

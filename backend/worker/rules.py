@@ -47,6 +47,14 @@ class BagObs:
 
 
 @dataclass(frozen=True)
+class DetectionObs:
+    """A box from an extra model (PPE or fire/smoke), with its class name lower-cased."""
+    box: Box
+    label: str
+    confidence: float
+
+
+@dataclass(frozen=True)
 class Candidate:
     type: str
     severity: str
@@ -69,6 +77,12 @@ class RuleConfig:
     bag_still_frac: float = 0.03
     bag_reach_frac: float = 0.15
     track_grace_s: float = 1.0
+    ppe_missing_frames: int = 10
+    fire_frames: int = 5
+    extra_model_conf: float = 0.5
+    helmet_labels: tuple[str, ...] = ("helmet", "hardhat", "hard-hat")
+    vest_labels: tuple[str, ...] = ("vest", "safety-vest", "safety vest")
+    fire_labels: tuple[str, ...] = ("fire", "smoke")
     night_start: time = time(20, 0)
     night_end: time = time(6, 0)
     timezone: str = "Asia/Kolkata"
@@ -80,12 +94,18 @@ class RuleConfig:
             fall_angle_deg=s.fall_angle_deg, upright_angle_deg=s.upright_angle_deg,
             fall_hip_drop=s.fall_hip_drop, fall_down_s=s.fall_down_s, unattended_s=s.unattended_s,
             bag_still_frac=s.bag_still_frac, bag_reach_frac=s.bag_reach_frac,
-            track_grace_s=s.track_grace_s, night_start=parse_hhmm(s.night_start),
+            track_grace_s=s.track_grace_s, ppe_missing_frames=s.ppe_missing_frames, fire_frames=s.fire_frames,
+            extra_model_conf=s.detect_conf, helmet_labels=labels(s.ppe_helmet_labels), vest_labels=labels(s.ppe_vest_labels),
+            fire_labels=labels(s.fire_labels), night_start=parse_hhmm(s.night_start),
             night_end=parse_hhmm(s.night_end), timezone=s.timezone,
         )
 
 
 # ---------- pure geometry and time helpers ----------
+
+def labels(csv: str) -> tuple[str, ...]:
+    return tuple(part.strip().lower() for part in csv.split(",") if part.strip())
+
 
 def parse_hhmm(value: str) -> time:
     hours, minutes = value.split(":")
@@ -184,6 +204,8 @@ class RulesEngine:
         self._upright: dict[int, tuple[float, float, float]] = {}  # track -> (hip_y, height, last_seen)
         self._bags: list[_BagState] = []
         self._last_fired: dict[str, float] = {}
+        self._ppe_missing: dict[int, int] = {}  # track -> consecutive analysed frames without helmet/vest
+        self._fire_streak = 0  # consecutive analysed frames with fire or smoke
 
     def set_zones(self, zones: list[ZoneDef]) -> None:
         self.zones = zones
@@ -196,10 +218,13 @@ class RulesEngine:
         frame_h: int,
         people: list[PersonObs],
         bags: list[BagObs] | None = None,
+        ppe: list[DetectionObs] | None = None,
+        fire: list[DetectionObs] | None = None,
     ) -> list[Candidate]:
         """Feed one analysed frame. `t` is a monotonic clock in seconds.
 
-        `bags` is None when bags were not checked on this frame (they are checked about once a second).
+        `bags`, `ppe` and `fire` are None when that model did not run on this frame (or is not installed),
+        which leaves its counters untouched.
         """
         cfg = self.cfg
         found: list[Candidate] = []
@@ -243,6 +268,10 @@ class RulesEngine:
 
         if bags is not None:
             found.extend(self._update_bags(t, frame_w, frame_h, bags, people))
+        if ppe is not None:
+            found.extend(self._update_ppe(people, zones_of, ppe))
+        if fire is not None:
+            found.extend(self._update_fire(frame_w, frame_h, fire))
 
         for timers in (self._access, self._loiter, self._down):
             timers.prune(t, cfg.track_grace_s)
@@ -301,6 +330,58 @@ class RulesEngine:
                 found.append(Candidate("unattended", "high", zone, bag.confidence, (),
                                        f"{bag.label} still and alone for {alone_for:.0f}s"))
         return found
+
+    def _update_ppe(self, people: list[PersonObs], zones_of: dict[int, list[ZoneDef]],
+                    detections: list[DetectionObs]) -> list[Candidate]:
+        """Person in a ppe zone without a helmet (top of their box) or a vest (middle of their box)
+        in N consecutive analysed frames."""
+        cfg = self.cfg
+        helmets = [d for d in detections if d.label in cfg.helmet_labels and d.confidence >= cfg.extra_model_conf]
+        vests = [d for d in detections if d.label in cfg.vest_labels and d.confidence >= cfg.extra_model_conf]
+        found, seen = [], set()
+        for p in people:
+            ppe_zone = next((z for z in zones_of[p.track_id] if z.kind == "ppe"), None)
+            if ppe_zone is None:
+                continue
+            seen.add(p.track_id)
+            x1, y1, x2, y2 = p.box
+            height = y2 - y1
+
+            def centre_in(det: DetectionObs, top: float, bottom: float) -> bool:
+                cx, cy = box_center(det.box)
+                return x1 <= cx <= x2 and y1 + top * height <= cy <= y1 + bottom * height
+
+            missing = []
+            if not any(centre_in(h, -0.1, 0.4) for h in helmets):  # helmets can stick out above the box
+                missing.append("helmet")
+            if not any(centre_in(v, 0.2, 0.8) for v in vests):
+                missing.append("vest")
+            if not missing:
+                self._ppe_missing.pop(p.track_id, None)
+                continue
+            count = self._ppe_missing.get(p.track_id, 0) + 1
+            self._ppe_missing[p.track_id] = count
+            if count >= cfg.ppe_missing_frames:
+                found.append(Candidate("ppe", "low", ppe_zone.name, p.confidence, (p.track_id,),
+                                       f"no {' or '.join(missing)} for {count} frames"))
+        self._ppe_missing = {k: v for k, v in self._ppe_missing.items() if k in seen}
+        return found
+
+    def _update_fire(self, frame_w: int, frame_h: int, detections: list[DetectionObs]) -> list[Candidate]:
+        """Fire or smoke in N consecutive analysed frames (confidence at least the threshold)."""
+        cfg = self.cfg
+        flames = [d for d in detections if d.label in cfg.fire_labels and d.confidence >= cfg.extra_model_conf]
+        if not flames:
+            self._fire_streak = 0
+            return []
+        self._fire_streak += 1
+        if self._fire_streak < cfg.fire_frames:
+            return []
+        strongest = max(flames, key=lambda d: d.confidence)
+        spot = feet_point(strongest.box, frame_w, frame_h)
+        zone = next((z.name for z in self.zones if point_in_polygon(spot, z.polygon)), None)
+        return [Candidate("fire", "critical", zone, strongest.confidence, (),
+                          f"{strongest.label} in {self._fire_streak} frames in a row")]
 
     def _apply_cooldown(self, t: float, found: list[Candidate]) -> list[Candidate]:
         """Same camera + type cannot fire again within the cooldown. One worker = one camera."""

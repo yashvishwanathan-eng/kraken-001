@@ -41,8 +41,11 @@ backend/
     ws.py              WebSocket connection manager
     deps.py            FastAPI dependencies: current_user (401) and require(action) (403)
     seed.py            python -m app.seed: loads cameras.yaml + zones.yaml (+ demo users) into the database; safe to rerun
-    routers/           health, cameras, stream, events, zones, responders, broadcast, assistant, stats, twilio, internal, auth, users, roll_call, audit
-    services/          escalation.py, calls.py, whatsapp.py, assistant.py, llm.py, stt.py, clips.py, permissions.py (PINs, sessions, camera scope, stream tokens), audit.py, camera_status.py (heartbeats)
+    routers/           health, cameras, stream, events, zones, responders, broadcast, assistant, stats, twilio, internal, auth, users, roll_call (/alerts/all + /roll-call), audit, share (signed media for WhatsApp/Twilio)
+    services/          escalation.py (ladders, digest, heartbeat watchdog), calls.py (Twilio + 1/s queue), whatsapp.py, alerts.py (alert everybody, roll call),
+                       incidents.py (ack/close shared by dashboard, phone, assistant), directory.py (who to call), assistant.py (question -> filter -> answer),
+                       commands.py (laptop commands + confirm), knowledge.py (SOP answers), llm.py (Groq -> Ollama), stt.py (Groq Whisper -> faster-whisper),
+                       permissions.py (PINs, sessions, camera scope, signed links), audit.py, camera_status.py (heartbeats)
   worker/
     run_worker.py      one process per camera: python -m worker.run_worker --camera cam-east-wing
     capture.py         latest-frame capture thread: reads the camera nonstop, keeps only the newest frame and the newest every-Nth keyframe, reconnects every 5 s
@@ -55,6 +58,8 @@ backend/
   config/cameras.yaml  cameras: id, name, source (0, http://PHONE-IP:8080/video, file path, rtsp://), port
   config/zones.yaml    demo zones per camera; polygon points are fractions of the frame (0..1); max_people for crowding
   config/demo_users.yaml  the 4 demo users (role, cameras, actions); PINs come from DEMO_USER_PINS in .env
+  config/demo_responders.yaml  call roster (zone, shift, call order); phones come from DEMO_RESPONDER_PHONES in .env
+  knowledge/           SOP and contact documents (.md/.txt) the assistant answers from; SAMPLE-sop.md is invented demo content
   alembic/
   tests/               conftest.py points tests at a separate `<db>_test` database
   models/              model weights + OpenVINO exports (gitignored); workers use <name>_openvino_model/ when present
@@ -63,6 +68,8 @@ docs/
   CONTRACT.md          API contract: endpoints, shapes, incident object, enums, auth rules
   GUIDE.md             start here: every topic from zero (simple, deeper, where, try it, check yourself) + first full run
   STUDY.md             Kirito's study notes: every concept with a tiny example, updated as we build
+  READ_FIRST.md        the simple, non-technical explanation of the whole system (read before anything else)
+  TECHNICAL.md         the full technical reference: every module, flow, setting, test, run and fix
   disclosures.md
 ```
 
@@ -99,6 +106,11 @@ See `docs/CONTRACT.md`. Endpoints, request and response shapes, the incident obj
 - `STREAM_TOKEN_TTL_S=3600` (signed stream URL lifetime).
 - `SESSION_TTL_H=12` (a login lasts one shift). `LOGIN_MAX_FAILURES=5` per `LOGIN_WINDOW_S=60`.
 - `PREFER_OPENVINO=true` (use the OpenVINO export when it exists; about 2x faster on Intel CPUs).
+- `CALLS_MODE` / `WHATSAPP_MODE`: `auto` (live when the keys are set, else off), `live`, `simulate` (pretend; for demos and tests), `off`.
+- `TWILIO_CPS=1` (new calls per second), `CALL_RING_TIMEOUT_S=30`, `CALL_LANGUAGE=en-IN`. Ladder delays: `CRITICAL_ADMIN_DELAY_S=60`, `CRITICAL_MANAGER_DELAY_S=120`, `HIGH_MANAGER_DELAY_S=60`.
+- Role labels the ladder looks for: `ROLE_ADMIN=Admin`, `ROLE_MANAGER=Manager`, `ROLE_HEAD_GUARD=Head Guard`, `ROLE_GUARD=Guard`.
+- `LLM_TIMEOUT_S=5` (Groq), `OLLAMA_TIMEOUT_S=10`, `ASSISTANT_CONFIRM_TTL_S=60`, `KNOWLEDGE_DIR=knowledge`.
+- PPE/fire labels: `PPE_HELMET_LABELS`, `PPE_VEST_LABELS`, `FIRE_LABELS` (class names differ between models), `PPE_MISSING_FRAMES=10`, `FIRE_FRAMES=5`.
 - `LOW_REPEAT_COUNT=3`, `LOW_REPEAT_WINDOW_MIN=60`.
 - `CRITICAL_ADMIN_DELAY_S=60` (critical: admin is called after the head guard has had 60 s).
 
@@ -172,7 +184,7 @@ ngrok http 8000
 ```
 
 ## .env keys
-DATABASE_URL, INTERNAL_KEY, PUBLIC_BASE_URL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, WHATSAPP_API_URL, WHATSAPP_TOKEN, GROQ_API_KEY, GROQ_MODEL, GROQ_STT_MODEL, OLLAMA_URL, OLLAMA_MODEL, OFFLINE_MODE, MEDIA_DIR, STREAM_SECRET, DEMO_USER_PINS
+DATABASE_URL, INTERNAL_KEY, PUBLIC_BASE_URL, TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_FROM_NUMBER, WHATSAPP_API_URL, WHATSAPP_TOKEN, GROQ_API_KEY, GROQ_MODEL, GROQ_STT_MODEL, OLLAMA_URL, OLLAMA_MODEL, OFFLINE_MODE, MEDIA_DIR, STREAM_SECRET, DEMO_USER_PINS, DEMO_RESPONDER_PHONES, FIRE_STATION_NUMBER, SITE_ADDRESS, PPE_MODEL_PATH, FIRE_MODEL_PATH, CALLS_MODE, WHATSAPP_MODE
 
 ## Speed targets
 Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s · incident to phone ringing < 15 s · typed answer about 2 s online · spoken answer about 4 s online · offline answer < 8 s.
@@ -190,8 +202,9 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Tests: rules engine (fake detections in, expected incidents out) and the assistant filter parser.
 
 ## Current status (update this daily)
-- Day: Tue 20 Oct, Gate 1 and Gate 2 (Gate 2 done a day early)
+- Day: Wed 21 Oct, full backend (everything that does not need Kirito's keys or decisions)
 - Done: 19 Oct: latest-frame capture thread, yolo11n-pose tracking with torso angle, MJPEG per camera. 20 Oct (Gate 1): zones in the database (`config/zones.yaml` + `python -m app.seed`); rules engine with access, loitering, crowding, fall, unattended bag, 60 s cooldown, night window; ring buffer + 10 s H.264 clip via FFmpeg; snapshot; incident stored and the API told via `/internal/incidents/{id}/created`, which broadcasts on the WebSocket manager. Gate 1 check passed on a test video: access incident in the database with snapshot and clip. pytest: 33 passed, using a separate test database.
 - Done (Gate 2): PIN login with opaque tokens (hashed, 12 h) and a 5-per-minute limit; 4 demo users from `config/demo_users.yaml`; `/me`, `/users`, `/cameras` with signed stream URLs, `/stream` proxy, `/zones`, `/events`, ack (idempotent) and resolve, `/stats`, `/audit-log`, `/responders`; `/ws/events?token=` filtered per user; audit row on every action; worker heartbeats make `/health` and `/cameras` live; OpenVINO exports used automatically (pose model 49 -> 25 ms per frame on the sandbox CPU). Live check on a real server passed: Guard got the incident on the WebSocket, saw only cam-webcam, streamed it through the proxy, acknowledged it, and the update arrived live. pytest: 55 passed.
-- Next: escalation and calls (22 Oct): severity ladders with timers, Twilio calls, keypad/speech, WhatsApp, heartbeat WhatsApp, daily digest. Needs Twilio and WhatsApp credentials in `.env`.
-- Blockers: PPE and fire/smoke model not chosen (licence decision for Kirito; candidates in docs/STUDY.md 3.9). Proposed contract clarifications P1-P10 need sign-off. Not tested with a real webcam or phone camera.
+- Done (21 Oct, full backend): escalation ladders on timers that stop at the first acknowledgement; Twilio calls through a 1-per-second queue with signed webhooks (keypad + speech: 1 ack, 2 false alarm for high only, 3 supervisor, 9 repeat, "alert everybody" with confirm); WhatsApp alerts with a signed snapshot link; low-severity repeat call; 18:00 digest; camera heartbeat watchdog; alert everybody + roll call board; broadcast; assistant query (Groq -> Ollama -> keyword parser), voice (Groq Whisper -> faster-whisper), 13 commands with a spoken-yes step for big actions, SOP answers from `knowledge/`; PPE and fire rules (off until a model is chosen); public-address guard so ngrok only exposes the webhooks. Live run in simulate mode passed end to end. pytest: 135 passed.
+- Next (Kirito): fill `.env` (Twilio, WhatsApp, Groq, Ollama, phones, fire station, site address), port Bhoomi's WhatsApp format if different, choose PPE/fire models, real SOPs in `knowledge/`, sign off contract P1-P18, then the full testing checklist on the laptop.
+- Blockers: needs Kirito's keys and decisions above. Offline speech model download (Hugging Face) could not be tested in the sandbox. Not tested with a real webcam or phone camera.

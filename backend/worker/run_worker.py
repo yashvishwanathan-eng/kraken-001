@@ -23,11 +23,11 @@ from app.db import SessionLocal
 from app.models import Zone
 from worker.buffer import RingBuffer
 from worker.capture import LatestFrameCapture
-from worker.detectors import BagDetector, Person, PersonPoseTracker, hip_y, torso_angle_deg
+from worker.detectors import BagDetector, Person, PersonPoseTracker, hip_y, optional_detector, torso_angle_deg
 from worker.heartbeat import HeartbeatSender
 from worker.incidents import IncidentReporter
 from worker.mjpeg import MjpegServer
-from worker.rules import BagObs, PersonObs, RuleConfig, RulesEngine, ZoneDef
+from worker.rules import BagObs, DetectionObs, PersonObs, RuleConfig, RulesEngine, ZoneDef
 
 REPORT_EVERY_S = 5.0
 ZONE_REFRESH_S = 30.0
@@ -86,6 +86,12 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     tracker.warm_up()
     bag_detector = BagDetector(settings.bag_model_path, settings.detect_imgsz, settings.detect_conf)
     bag_detector.warm_up()
+    # PPE and fire/smoke need custom models; each rule stays off until its model path is set in .env
+    ppe_detector = optional_detector(settings.ppe_model_path, settings.detect_imgsz, settings.detect_conf, "PPE")
+    fire_detector = optional_detector(settings.fire_model_path, settings.detect_imgsz, settings.detect_conf, "fire")
+    for extra in (ppe_detector, fire_detector):
+        if extra is not None:
+            extra.warm_up()
 
     zones = load_zones(camera.id) or []
     engine = RulesEngine(zones, RuleConfig.from_settings(settings))
@@ -128,7 +134,13 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
             detect_ms = (time.perf_counter() - t0) * 1000
 
             h, w = keyframe.image.shape[:2]
-            candidates = engine.update(now, datetime.now(timezone.utc), w, h, [to_obs(p) for p in people], bags)
+            ppe = fire = None
+            if ppe_detector is not None and any(z.kind == "ppe" for z in zones):
+                ppe = [DetectionObs(d.xyxy, d.label, d.confidence) for d in ppe_detector.detect(keyframe.image)]
+            if fire_detector is not None:
+                fire = [DetectionObs(d.xyxy, d.label, d.confidence) for d in fire_detector.detect(keyframe.image)]
+            candidates = engine.update(now, datetime.now(timezone.utc), w, h, [to_obs(p) for p in people], bags,
+                                       ppe=ppe, fire=fire)
 
             analysed_in_window += 1
             if now - window_start >= REPORT_EVERY_S:

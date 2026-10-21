@@ -150,3 +150,43 @@ class BagDetector:
             Bag(xyxy=tuple(box), label=BAG_CLASSES[int(cls)], confidence=score)
             for box, cls, score in zip(boxes.xyxy.tolist(), boxes.cls.tolist(), boxes.conf.tolist())
         ]
+
+
+@dataclass
+class Detection:
+    xyxy: tuple[float, float, float, float]
+    label: str  # lower-cased class name from the model
+    confidence: float
+
+
+class ClassDetector:
+    """A custom YOLO model (PPE or fire/smoke). Class names come from the model file itself."""
+
+    def __init__(self, model_path: str, imgsz: int, conf: float) -> None:
+        self.imgsz = imgsz
+        self.conf = conf
+        self.model = load_model(model_path, task="detect")
+        self.names = {int(k): str(v).lower() for k, v in self.model.names.items()}
+        log.info("custom model %s classes: %s", Path(model_path).name, ", ".join(self.names.values()))
+
+    def warm_up(self) -> None:
+        self.detect(np.zeros((self.imgsz, self.imgsz, 3), dtype=np.uint8))
+
+    def detect(self, frame: np.ndarray) -> list[Detection]:
+        boxes = self.model.predict(frame, imgsz=self.imgsz, conf=self.conf, verbose=False)[0].boxes
+        if boxes is None:
+            return []
+        return [Detection(tuple(box), self.names.get(int(cls), str(int(cls))), score)
+                for box, cls, score in zip(boxes.xyxy.tolist(), boxes.cls.tolist(), boxes.conf.tolist())]
+
+
+def optional_detector(model_path: str, imgsz: int, conf: float, purpose: str) -> ClassDetector | None:
+    """Load a custom model only if its path is set and the file exists; otherwise that rule stays off."""
+    if not model_path:
+        log.info("%s rule off: no model path set", purpose)
+        return None
+    path = Path(model_path) if Path(model_path).is_absolute() else BACKEND_DIR / model_path
+    if not path.exists():
+        log.warning("%s rule off: model file %s not found", purpose, path)
+        return None
+    return ClassDetector(str(path), imgsz, conf)
