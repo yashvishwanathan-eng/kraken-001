@@ -28,17 +28,26 @@ RESPONDERS_FILE = BACKEND_DIR / "config" / "demo_responders.yaml"
 
 
 def seed_cameras(db: Session) -> int:
-    for cam in load_cameras():
+    cameras = load_cameras()
+    for cam in cameras:
         row = db.get(Camera, cam.id) or Camera(id=cam.id)
         row.name, row.source, row.port = cam.name, cam.source, cam.port
         db.add(row)
-    return len(load_cameras())
+    # Never deleted here: deleting a camera would also delete its incidents.
+    wanted = {cam.id for cam in cameras}
+    for old in db.scalars(select(Camera.id).where(Camera.id.not_in(wanted))):
+        log.warning("camera %s is in the database but no longer in cameras.yaml (left as it is)", old)
+    return len(cameras)
 
 
 def seed_zones(db: Session, zones_file: Path = ZONES_FILE) -> int:
     raw = yaml.safe_load(zones_file.read_text(encoding="utf-8")) or {}
     count = 0
     for camera_id, zones in (raw.get("zones") or {}).items():
+        names = [item["name"] for item in zones]
+        # a zone removed from zones.yaml is removed from the database too (incidents keep their zone name)
+        for old in db.scalars(select(Zone).where(Zone.camera_id == camera_id, Zone.name.not_in(names))):
+            db.delete(old)
         for item in zones:
             row = db.scalar(select(Zone).where(Zone.camera_id == camera_id, Zone.name == item["name"]))
             row = row or Zone(camera_id=camera_id, name=item["name"])

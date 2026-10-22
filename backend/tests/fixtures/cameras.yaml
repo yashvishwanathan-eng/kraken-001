@@ -1,0 +1,15 @@
+# FROZEN COPY for the tests only. Edit config/*.yaml for the demo; tests keep using these.
+# Cameras for this machine. One worker process per camera:
+#   python -m worker.run_worker --camera cam-webcam
+# source: 0 = laptop webcam, http://PHONE-IP:8080/video = phone IP camera,
+#         a file path for recorded test video, or rtsp://... for CCTV.
+# port: where the worker serves annotated MJPEG (127.0.0.1 only).
+cameras:
+  - id: cam-webcam
+    name: Laptop Webcam
+    source: "0"
+    port: 8101
+  - id: cam-phone
+    name: Phone Camera
+    source: "http://PHONE-IP:8080/video"
+    port: 8102

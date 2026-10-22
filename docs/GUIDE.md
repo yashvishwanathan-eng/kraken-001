@@ -443,7 +443,7 @@ Do this once on your Windows laptop, in order. Each step says what you should se
    $h = @{ Authorization = "Bearer $($r.token)" }
    Invoke-RestMethod -Uri http://127.0.0.1:8000/me -Headers $h
    ```
-   You should see Suresh Babu, Guard, with only `cam-webcam`.
+   You should see Suresh Babu, Guard, with only `cam-door` and `cam-entrance` (not the shop floor).
 7. **Start a camera worker** (window 3): `python -m worker.run_worker --camera cam-webcam`.
    The first run downloads the model files into `models\` (about 12 MB). Every 5 s it prints FPS.
    Open `http://127.0.0.1:8101/stream` to watch boxes, IDs and zones live.

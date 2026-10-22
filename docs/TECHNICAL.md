@@ -97,10 +97,11 @@ Rules that keep this design simple and fast:
 | `worker/incidents.py` | Saves the row, timeline and snapshot, notifies the API, writes the clip 5 s later |
 | `worker/heartbeat.py` | Posts online + FPS every 5 s |
 | `worker/mjpeg.py` | Annotated MJPEG server on `127.0.0.1:81xx` |
-| `config/cameras.yaml`, `zones.yaml`, `demo_users.yaml`, `demo_responders.yaml` | Demo data loaded by the seed |
+| `config/cameras.yaml`, `zones.yaml`, `demo_users.yaml`, `demo_responders.yaml` | Demo data loaded by the seed: 3 stage cameras (`cam-door`, `cam-floor`, `cam-entrance`) plus `cam-webcam` for testing at home. The seed updates rows and removes zones dropped from `zones.yaml`; cameras are never deleted (that would delete their incidents) |
+| `tools/camera_share.py` | Runs on the second laptop: shares its webcam on the Wi-Fi as MJPEG at `:8090/video`, like the IP Webcam app on a phone. Needs only Python and OpenCV |
 | `knowledge/` | SOP and contact documents for the assistant (`SAMPLE-sop.md` is invented; replace it) |
 | `alembic/versions/` | Database migrations |
-| `tests/` | pytest suite (section 10) |
+| `tests/` | pytest suite (section 10). `tests/fixtures/` holds a frozen copy of the config, so editing `config/*.yaml` for the demo never breaks a test |
 
 ## 3. Data model (PostgreSQL)
 
@@ -346,6 +347,8 @@ yolo export model=models/yolo11n-pose.pt format=openvino imgsz=480
 yolo export model=models/yolo11n.pt format=openvino imgsz=480
 ```
 
+For the 3-camera stage setup (2 Android phones + a second laptop), follow `docs/DEMO_SETUP.md`.
+
 Needed on the machine:
 - PostgreSQL 16 (create the database named in `DATABASE_URL`);
 - FFmpeg on PATH (`ffmpeg -version`);
@@ -376,9 +379,10 @@ pytest tests/test_escalation.py -q
 | `test_escalation.py` | Ladders per severity, stop on ack, low-repeat, digest, heartbeat watchdog (fake scheduler) |
 | `test_twilio_alerts.py` | Signatures, TwiML, keypad/speech, idempotency, alert-all, roll call, broadcast, public-address guard |
 | `test_calls.py` | Twilio client retry rules, rate limit, cancel (fake Twilio) |
+| `test_demo_config.py` | The real demo config: unique ids and ports, zones inside the frame and on real cameras, users and roster consistent; the seed removes dropped zones |
 | `test_assistant.py` | Keyword filter, LLM fallback, answers, commands, confirm tokens, permissions, knowledge |
 
-Last run: **135 passed**. The tests never call real Twilio, WhatsApp or Groq. They use simulate mode or fakes.
+Last run: **140 passed**. The tests never call real Twilio, WhatsApp or Groq. They use simulate mode or fakes.
 
 Manual checks still to do on your laptop (they can't be automated here):
 - a real webcam and a phone camera (IP Webcam app: `http://PHONE-IP:8080/video`);

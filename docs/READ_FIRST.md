@@ -274,7 +274,7 @@ AI is available at all, it still understands common questions using a built-in w
 **Done and tested:** everything that does not need your accounts or decisions. That means detection
 (except helmet/fire), the rules, clips, the dashboard API, logins and permissions, the call ladder,
 phone keys and speech, WhatsApp messages, alert everybody, the roll call, broadcast, the assistant,
-SOP answers, the audit log and the camera "still alive" check. 135 automatic tests pass, and a full
+SOP answers, the audit log and the camera "still alive" check. 140 automatic tests pass, and a full
 run worked end to end in "pretend" mode (calls and messages written down instead of sent).
 
 **Blanks only you can fill.** Until you do, that part switches itself off safely. Nothing breaks.

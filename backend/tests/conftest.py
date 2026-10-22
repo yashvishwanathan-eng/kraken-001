@@ -23,6 +23,10 @@ def _test_database_url() -> str:
 
 os.environ["DATABASE_URL"] = _test_database_url()
 
+# Tests use a frozen copy of the demo config, so editing config/*.yaml for the demo never breaks them.
+FIXTURES = BACKEND_DIR / "tests" / "fixtures"
+os.environ["CAMERA_CONFIG_PATH"] = str(FIXTURES / "cameras.yaml")
+
 
 @pytest.fixture(scope="session")
 def migrated_db():
@@ -71,10 +75,10 @@ def roster(db):
     camera_status.clear()
     seed_cameras(db)
     db.flush()
-    seed_zones(db)
-    seed_users(db, pins=DEMO_PINS)
+    seed_zones(db, FIXTURES / "zones.yaml")
+    seed_users(db, FIXTURES / "demo_users.yaml", pins=DEMO_PINS)
     db.flush()
-    seed_responders(db, phones=DEMO_PHONES)
+    seed_responders(db, FIXTURES / "demo_responders.yaml", phones=DEMO_PHONES)
     db.commit()
     return db
 

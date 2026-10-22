@@ -12,6 +12,7 @@ from app.models import AuditLog, Incident, TimelineEvent
 from app.routers.auth import reset_login_limits
 from app.seed import seed_cameras, seed_users, seed_zones
 from app.services import camera_status
+from tests.conftest import FIXTURES
 
 PINS = {"anita": "1111", "vikram": "2222", "ravi": "3333", "suresh": "4444"}
 client = TestClient(app)
@@ -23,8 +24,8 @@ def seeded(db):
     camera_status.clear()
     seed_cameras(db)
     db.flush()
-    seed_zones(db)
-    seed_users(db, pins=PINS)
+    seed_zones(db, FIXTURES / "zones.yaml")
+    seed_users(db, FIXTURES / "demo_users.yaml", pins=PINS)
     db.commit()
     return db
 

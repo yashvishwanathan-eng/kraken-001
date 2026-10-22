@@ -1,14 +1,23 @@
-# Cameras for this machine. One worker process per camera:
-#   python -m worker.run_worker --camera cam-webcam
-# source: 0 = laptop webcam, http://PHONE-IP:8080/video = phone IP camera,
+# Cameras for the demo. One worker process per camera, all on THIS laptop:
+#   python -m worker.run_worker --camera cam-door
+# source: an address on the shared Wi-Fi (see docs/DEMO_SETUP.md), 0 = this laptop's webcam,
 #         a file path for recorded test video, or rtsp://... for CCTV.
-# port: where the worker serves annotated MJPEG (127.0.0.1 only).
+# Replace PHONE1-IP / PHONE2-IP / LAPTOP2-IP with the numbers the apps show, e.g. 192.168.137.23.
+# port: where the worker serves annotated MJPEG (127.0.0.1 only). Every camera needs its own.
 cameras:
-  - id: cam-webcam
-    name: Laptop Webcam
-    source: "0"
+  - id: cam-door
+    name: Restricted Door
+    source: "http://PHONE1-IP:8080/video"   # Android phone 1, IP Webcam app
     port: 8101
-  - id: cam-phone
-    name: Phone Camera
-    source: "http://PHONE-IP:8080/video"
+  - id: cam-floor
+    name: Shop Floor
+    source: "http://PHONE2-IP:8080/video"   # Android phone 2, IP Webcam app
     port: 8102
+  - id: cam-entrance
+    name: Entrance
+    source: "http://LAPTOP2-IP:8090/video"  # second laptop, tools/camera_share.py
+    port: 8103
+  - id: cam-webcam
+    name: Laptop Webcam (testing)
+    source: "0"                             # this laptop's own webcam, for testing alone at home
+    port: 8104

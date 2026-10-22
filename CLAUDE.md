@@ -55,13 +55,14 @@ backend/
     incidents.py       stores a confirmed incident (row, timeline, snapshot), notifies the API, writes the clip 5 s later
     heartbeat.py       posts online + analysed FPS to /internal/heartbeat every 5 s
     mjpeg.py           annotated MJPEG server on 127.0.0.1:81xx
-  config/cameras.yaml  cameras: id, name, source (0, http://PHONE-IP:8080/video, file path, rtsp://), port
+  config/cameras.yaml  cameras: id, name, source (0, http://PHONE-IP:8080/video, file path, rtsp://), port. Demo: cam-door (phone 1), cam-floor (phone 2), cam-entrance (laptop 2), cam-webcam (home testing)
   config/zones.yaml    demo zones per camera; polygon points are fractions of the frame (0..1); max_people for crowding
   config/demo_users.yaml  the 4 demo users (role, cameras, actions); PINs come from DEMO_USER_PINS in .env
   config/demo_responders.yaml  call roster (zone, shift, call order); phones come from DEMO_RESPONDER_PHONES in .env
   knowledge/           SOP and contact documents (.md/.txt) the assistant answers from; SAMPLE-sop.md is invented demo content
   alembic/
-  tests/               conftest.py points tests at a separate `<db>_test` database
+  tools/camera_share.py  runs on the second laptop: shares its webcam as MJPEG at :8090/video (Python + OpenCV only)
+  tests/               conftest.py points tests at a separate `<db>_test` database; tests/fixtures/ is a frozen copy of config/ so demo edits never break tests
   models/              model weights + OpenVINO exports (gitignored); workers use <name>_openvino_model/ when present
   media/               clips and snapshots (gitignored)
 docs/
@@ -70,6 +71,7 @@ docs/
   STUDY.md             Kirito's study notes: every concept with a tiny example, updated as we build
   READ_FIRST.md        the simple, non-technical explanation of the whole system (read before anything else)
   TECHNICAL.md         the full technical reference: every module, flow, setting, test, run and fix
+  DEMO_SETUP.md        stage setup: 2 Android phones (IP Webcam) + laptop 2 as cameras on the laptop's own hotspot
   disclosures.md
 ```
 
@@ -206,5 +208,6 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Done: 19 Oct: latest-frame capture thread, yolo11n-pose tracking with torso angle, MJPEG per camera. 20 Oct (Gate 1): zones in the database (`config/zones.yaml` + `python -m app.seed`); rules engine with access, loitering, crowding, fall, unattended bag, 60 s cooldown, night window; ring buffer + 10 s H.264 clip via FFmpeg; snapshot; incident stored and the API told via `/internal/incidents/{id}/created`, which broadcasts on the WebSocket manager. Gate 1 check passed on a test video: access incident in the database with snapshot and clip. pytest: 33 passed, using a separate test database.
 - Done (Gate 2): PIN login with opaque tokens (hashed, 12 h) and a 5-per-minute limit; 4 demo users from `config/demo_users.yaml`; `/me`, `/users`, `/cameras` with signed stream URLs, `/stream` proxy, `/zones`, `/events`, ack (idempotent) and resolve, `/stats`, `/audit-log`, `/responders`; `/ws/events?token=` filtered per user; audit row on every action; worker heartbeats make `/health` and `/cameras` live; OpenVINO exports used automatically (pose model 49 -> 25 ms per frame on the sandbox CPU). Live check on a real server passed: Guard got the incident on the WebSocket, saw only cam-webcam, streamed it through the proxy, acknowledged it, and the update arrived live. pytest: 55 passed.
 - Done (21 Oct, full backend): escalation ladders on timers that stop at the first acknowledgement; Twilio calls through a 1-per-second queue with signed webhooks (keypad + speech: 1 ack, 2 false alarm for high only, 3 supervisor, 9 repeat, "alert everybody" with confirm); WhatsApp alerts with a signed snapshot link; low-severity repeat call; 18:00 digest; camera heartbeat watchdog; alert everybody + roll call board; broadcast; assistant query (Groq -> Ollama -> keyword parser), voice (Groq Whisper -> faster-whisper), 13 commands with a spoken-yes step for big actions, SOP answers from `knowledge/`; PPE and fire rules (off until a model is chosen); public-address guard so ngrok only exposes the webhooks. Live run in simulate mode passed end to end. pytest: 135 passed.
+- Done (22 Oct): 3-camera demo layout (phone 1 restricted door, phone 2 shop floor for fall/bag/fire, laptop 2 entrance for crowding/PPE); `tools/camera_share.py`; seed removes zones dropped from zones.yaml; tests use frozen config fixtures; `docs/DEMO_SETUP.md`. End-to-end check: camera_share -> worker -> /health online at 5 analysed fps from a 15 fps source, so sources should send 25+ fps. pytest: 140 passed.
 - Next (Kirito): fill `.env` (Twilio, WhatsApp, Groq, Ollama, phones, fire station, site address), port Bhoomi's WhatsApp format if different, choose PPE/fire models, real SOPs in `knowledge/`, sign off contract P1-P18, then the full testing checklist on the laptop.
 - Blockers: needs Kirito's keys and decisions above. Offline speech model download (Hugging Face) could not be tested in the sandbox. Not tested with a real webcam or phone camera.

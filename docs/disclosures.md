@@ -45,4 +45,5 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - WhatsApp Business API (Meta WhatsApp Cloud API format, to be replaced by the provider used in Kirito's Bhoomi project): alert text and a 24-hour snapshot link.
 - Groq API (cloud): turns typed/spoken questions into a filter, picks commands, answers SOP questions from our documents, and speech to text. Only the question text (or voice clip) is sent.
 - Ollama (MIT): runs the offline language model on the laptop.
+- IP Webcam by Pavel Khlebovich (free Android app, proprietary): turns the two demo phones into network cameras. Video goes only over our own hotspot to the event laptop.
 - ngrok (service): gives the laptop a public address so Twilio can reach the webhooks; only `/twilio/*` and `/share/*` answer through it.

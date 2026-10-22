@@ -13,7 +13,7 @@ responders:
     call_order: 1
   - user: vikram
     name: Vikram Shah
-    zone: loading-bay
+    zone: shop-floor
     shift_start: "00:00"
     shift_end: "00:00"
     call_order: 1
@@ -25,7 +25,7 @@ responders:
     call_order: 1
   - user: suresh
     name: Suresh Babu
-    zone: assembly-line
+    zone: entrance
     shift_start: "00:00"
     shift_end: "00:00"
     call_order: 2

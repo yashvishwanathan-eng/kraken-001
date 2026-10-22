@@ -14,15 +14,15 @@ users:
   - key: vikram
     name: Vikram Shah
     role: Manager
-    cameras: [cam-webcam, cam-phone]
+    cameras: [cam-door, cam-floor, cam-entrance, cam-webcam]
     actions: [ack, resolve, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant]
   - key: ravi
     name: Ravi Kumar
     role: Head Guard
-    cameras: [cam-webcam, cam-phone]
+    cameras: [cam-door, cam-floor, cam-entrance, cam-webcam]
     actions: [ack, resolve, alert_all, broadcast, assistant]
   - key: suresh
     name: Suresh Babu
     role: Guard
-    cameras: [cam-webcam]
+    cameras: [cam-door, cam-entrance]   # not the shop floor: shows that a guard only sees their own cameras
     actions: [ack]
