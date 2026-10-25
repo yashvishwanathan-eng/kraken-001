@@ -29,6 +29,16 @@ def current_user(token: str = Depends(bearer_token)) -> User:
         return user
 
 
+def require_any(*actions: str) -> Callable[..., User]:
+    """Allowed when the user holds at least one of the actions."""
+    def check(user: User = Depends(current_user)) -> User:
+        if not any(can(user, action) for action in actions):
+            raise HTTPException(status_code=403, detail=f"your role is not allowed to do this ({' or '.join(actions)})")
+        return user
+
+    return check
+
+
 def require(action: str) -> Callable[..., User]:
     def check(user: User = Depends(current_user)) -> User:
         if not can(user, action):

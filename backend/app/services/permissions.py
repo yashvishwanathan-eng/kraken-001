@@ -32,6 +32,11 @@ ACTIONS = {
     "alert_all",  # "alert everybody"
     "broadcast",  # /broadcast
     "assistant",  # /assistant/*
+    "manage_sites",  # sites, buildings, areas, camera placement
+    "manage_guards",  # guard post, equipment and personal details (saving)
+    "view_guard_details",  # guard personal details (Admin only by default)
+    "scan_badges",  # badge reader or laptop
+    "delegate_cameras",  # create and edit users, but only with cameras and actions this user already has
 }
 
 BCRYPT_ROUNDS = 10  # about 70 ms per check: fine for a login, slow for someone guessing PINs

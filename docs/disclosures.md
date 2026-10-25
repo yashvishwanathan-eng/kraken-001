@@ -41,6 +41,10 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - qrcode 8.2 (BSD licence): draws the invitation QR code as a PNG on the laptop.
 - SMTP email (the provider is chosen by Kirito: a Gmail app password, Outlook, or a school mail server): sends the invitation link. Only the invitee's address and the link leave the laptop.
 
+## Encryption (in use, P21)
+- cryptography 46.0.3 (Apache-2.0 or BSD-3-Clause): encrypts guard personal details at rest (Fernet) and computes the keyed hash used for badge lookups (HMAC-SHA256).
+- Docker PostgreSQL image `postgres:16` (PostgreSQL licence) via `backend/docker-compose.yml`.
+
 ## External services and databases (in use)
 - PostgreSQL 16 (PostgreSQL licence), local on the event laptop.
 - FFmpeg (LGPL-2.1+/GPL depending on build; we call the `ffmpeg` command, libx264 is GPL-2.0): re-encodes incident clips to H.264 MP4.

@@ -8,11 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as DbSession
 
 from app.db import SessionLocal
-from app.deps import require
+from app.deps import require, require_any
 from app.models import Camera, User
 from app.schemas import UserCreate, UserOut, UserUpdate
 from app.services.audit import record
-from app.services.permissions import ACTIONS, end_sessions, find_user_by_pin, hash_pin
+from app.services.permissions import ACTIONS, allowed_cameras, end_sessions, find_user_by_pin, hash_pin
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -20,6 +20,18 @@ router = APIRouter(prefix="/users", tags=["users"])
 def to_out(user: User) -> UserOut:
     return UserOut(id=user.id, name=user.name, role=user.role, camera_ids=list(user.camera_ids),
                    actions=list(user.actions), active=user.active)
+
+
+def _delegation_guard(actor: User, camera_ids: list[str] | None, actions: list[str] | None) -> None:
+    """A user with manage_users may give anything. A delegating user (delegate_cameras only) may give only
+    cameras they can see and actions they hold themselves. This is how a manager hands cameras down."""
+    if "manage_users" in actor.actions:
+        return
+    scope = allowed_cameras(actor)
+    if camera_ids is not None and scope is not None and not set(camera_ids) <= scope:
+        raise HTTPException(status_code=403, detail="you can only give people cameras you can see yourself")
+    if actions is not None and not set(actions) <= set(actor.actions):
+        raise HTTPException(status_code=403, detail="you can only give people actions you hold yourself")
 
 
 def _validate(db: DbSession, camera_ids: list[str] | None, actions: list[str] | None,
@@ -45,7 +57,8 @@ def list_users(_: User = Depends(require("manage_users"))) -> list[UserOut]:
 
 
 @router.post("", response_model=UserOut, status_code=201)
-def create_user(body: UserCreate, admin: User = Depends(require("manage_users"))) -> UserOut:
+def create_user(body: UserCreate, admin: User = Depends(require_any("manage_users", "delegate_cameras"))) -> UserOut:
+    _delegation_guard(admin, body.camera_ids, body.actions)
     with SessionLocal() as db:
         _validate(db, body.camera_ids, body.actions, body.pin, None)
         user = User(name=body.name, role=body.role, camera_ids=sorted(set(body.camera_ids)),
@@ -58,7 +71,8 @@ def create_user(body: UserCreate, admin: User = Depends(require("manage_users"))
 
 
 @router.put("/{user_id}", response_model=UserOut)
-def update_user(user_id: int, body: UserUpdate, admin: User = Depends(require("manage_users"))) -> UserOut:
+def update_user(user_id: int, body: UserUpdate, admin: User = Depends(require_any("manage_users", "delegate_cameras"))) -> UserOut:
+    _delegation_guard(admin, body.camera_ids, body.actions)
     with SessionLocal() as db:
         user = db.get(User, user_id)
         if user is None:

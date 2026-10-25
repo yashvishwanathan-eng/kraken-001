@@ -33,6 +33,7 @@ from app.services import camera_status
 from app.services import incidents as incident_ops
 from app.services.calls import CallService, calls
 from app.services.directory import Contact, contacts_for_role
+from app.services.badges import incident_badge_status
 from app.services.permissions import share_url
 from app.services.whatsapp import WhatsAppService, whatsapp
 from app.ws import manager
@@ -66,10 +67,11 @@ def local_time_text(dt: datetime, tz: str) -> str:
     return dt.astimezone(ZoneInfo(tz)).strftime("%I:%M %p").lstrip("0")
 
 
-def alert_text(incident: Incident, tz: str) -> str:
+def alert_text(incident: Incident, tz: str, badge: str | None = None) -> str:
     where = incident.camera.name + (f", {incident.zone.replace('-', ' ')}" if incident.zone else "")
+    note = " No badge scanned for this entry." if badge == "not_scanned" else ""
     return (f"{PRODUCT_NAME} alert. {incident.severity.capitalize()}: {TYPE_LABELS.get(incident.type, incident.type)} "
-            f"at {where}, {local_time_text(incident.started_at, tz)}. Incident {incident.id}.")
+            f"at {where}, {local_time_text(incident.started_at, tz)}. Incident {incident.id}.{note}")
 
 
 class Escalation:
@@ -151,7 +153,8 @@ class Escalation:
                 log.warning("incident=%d step=%d no %s with a phone number on the roster", incident_id, index,
                             step.who)
                 return
-            text = alert_text(incident, self.settings.timezone)
+            badge = incident_badge_status(db, incident) if incident.type == "access" else None
+            text = alert_text(incident, self.settings.timezone, badge)
             if step.action == "call":
                 target = contacts[0]
                 if index > 0:

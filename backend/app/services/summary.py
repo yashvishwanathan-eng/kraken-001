@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session as DbSession, selectinload
 from app.config import get_settings
 from app.models import AuditLog, Camera, Incident, User
 from app.services import camera_status
+from app.services.badges import incident_badge_status
 from app.services.permissions import allowed_cameras
 
 
@@ -68,7 +69,8 @@ def build(db: DbSession, user: User, start: datetime, end: datetime) -> dict:
         "sector": {"all_cameras": scope is None, "camera_ids": camera_ids},
         "incidents": {"total": len(incidents), "by_status": by_status, "by_type": by_type},
         "violations": {"restricted_entries": len(entries), "still_open": len(open_entries),
-                       "items": [_entry(inc) for inc in entries[:50]]},
+                       "without_badge": sum(1 for inc in entries if _badge(db, inc) == "not_scanned"),
+                       "items": [_entry(db, inc) for inc in entries[:50]]},
         "cameras": camera_rows,
         "logins": logins,
     }
@@ -76,9 +78,14 @@ def build(db: DbSession, user: User, start: datetime, end: datetime) -> dict:
     return result
 
 
-def _entry(inc: Incident) -> dict:
+def _badge(db: DbSession, inc: Incident) -> str:
+    return incident_badge_status(db, inc)
+
+
+def _entry(db: DbSession, inc: Incident) -> dict:
     return {"incident_id": inc.id, "at": inc.started_at, "camera_id": inc.camera_id, "zone": inc.zone,
-            "status": inc.status, "acknowledged_by": inc.acknowledged_by or None}
+            "status": inc.status, "acknowledged_by": inc.acknowledged_by or None,
+            "badge_status": _badge(db, inc)}
 
 
 def _clock(value: datetime, tz: str) -> str:
@@ -93,6 +100,9 @@ def _text(r: dict, tz: str) -> str:
     v = r["violations"]
     if v["restricted_entries"] == 0:
         parts.append("No violations: no restricted-area entries.")
+    elif v["without_badge"]:
+        parts.append(f"{v['restricted_entries']} restricted-area entries, {v['without_badge']} with no badge scan, "
+                     f"{v['still_open']} still open.")
     else:
         latest = v["items"][0]
         where = latest["zone"].replace("-", " ") if latest["zone"] else "an unknown zone"

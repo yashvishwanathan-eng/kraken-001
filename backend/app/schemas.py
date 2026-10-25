@@ -382,11 +382,13 @@ class SummaryEntry(BaseModel):
     zone: str | None
     status: str
     acknowledged_by: str | None
+    badge_status: str  # scanned, not_scanned or unknown (camera not placed in an area yet)
 
 
 class SummaryViolations(BaseModel):
     restricted_entries: int
     still_open: int
+    without_badge: int
     items: list[SummaryEntry]
 
 
@@ -421,3 +423,113 @@ class SummaryOut(BaseModel):
     text: str  # plain English, built from the counts above; read aloud by the dashboard
 
     model_config = {"populate_by_name": True}
+
+
+# ---------- P21. Sites, guards, badges ----------
+
+class SiteCreate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+    address: Annotated[str | None, Field(max_length=255)] = None
+
+
+class BuildingCreate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+
+
+class AreaCreate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+    kind: Literal["room", "area"] = "room"
+
+
+class CameraAreaIn(BaseModel):
+    area_id: int | None = None
+
+
+class AreaOut(BaseModel):
+    id: int
+    name: str
+    kind: str
+    camera_ids: list[str]
+
+
+class BuildingOut(BaseModel):
+    id: int
+    name: str
+    areas: list[AreaOut]
+
+
+class SiteOut(BaseModel):
+    id: int
+    name: str
+    address: str | None
+    buildings: list[BuildingOut]
+
+
+class SitesOut(BaseModel):
+    sites: list[SiteOut]
+
+
+class PersonalDetails(BaseModel):
+    badge_number: Annotated[str, Field(max_length=80)] = ""
+    badge_id: Annotated[str, Field(max_length=80)] = ""
+    security_number: Annotated[str, Field(max_length=80)] = ""
+    emergency_contact: Annotated[str, Field(max_length=200)] = ""
+
+
+class GuardProfileIn(BaseModel):
+    position: Annotated[str | None, Field(max_length=120)] = None
+    site_id: int | None = None
+    post: Annotated[str | None, Field(max_length=120)] = None
+    equipment: Annotated[str | None, Field(max_length=500)] = None
+    has_phone: bool = False
+    personal: PersonalDetails | None = None  # replaces the stored details entirely; omit to clear them
+
+
+class GuardListItem(BaseModel):
+    user_id: int
+    name: str
+    role: str
+    position: str | None
+    post: str | None
+
+
+class GuardProfileOut(BaseModel):
+    user_id: int
+    name: str
+    role: str
+    camera_ids: list[str]
+    position: str | None
+    site_id: int | None
+    site_name: str | None
+    post: str | None
+    equipment: str | None
+    has_phone: bool
+    linked_login: bool
+    has_personal_details: bool
+    personal: PersonalDetails | None = None  # only on the admin's detail view
+
+
+class BadgeScanIn(BaseModel):
+    badge_number: Annotated[str, Field(min_length=1, max_length=80)]
+    area_id: int | None = None
+    reader: Annotated[str | None, Field(max_length=120)] = None
+
+
+class BadgeScanOut(BaseModel):
+    ok: bool
+    guard_name: str
+    at: datetime
+    area_id: int | None
+
+
+class PresentGuard(BaseModel):
+    user_id: int
+    name: str
+    area_id: int | None
+    area_name: str | None
+    last_scan_at: datetime
+
+
+class PresenceOut(BaseModel):
+    at: datetime
+    present: list[PresentGuard]

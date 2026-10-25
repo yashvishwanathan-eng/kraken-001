@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""  # secret: .env only
     smtp_from: str = ""  # e.g. "RingGuard <alerts@example.com>"
+    data_key: str = ""  # secret: encrypts guard personal details and computes badge lookups. Keep it safe.
+    badge_window_s: int = 300  # a badge scan this recent covers an entry into its area
+    presence_window_s: int = 900  # who is 'present' at a time: a scan this recent in that area
     fire_station_number: str = ""  # only ever dialled when a human orders it and says "yes"
     site_address: str = ""  # read to the fire station on that call, e.g. "Plot 12, Hosur Road, Bengaluru"
     ppe_model_path: str = ""  # helmet/vest model (.pt); empty = PPE rule off until a model is chosen

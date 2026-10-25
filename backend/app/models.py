@@ -1,7 +1,7 @@
 from datetime import datetime, time
 from typing import Any
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Time, func
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String, Time, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -16,6 +16,8 @@ class Camera(Base):
     name: Mapped[str] = mapped_column(String(120))
     source: Mapped[str] = mapped_column(String(255))
     port: Mapped[int] = mapped_column(Integer)
+    area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True,
+                                                index=True)  # which room or area it watches
 
     zones: Mapped[list["Zone"]] = relationship(back_populates="camera", cascade="all, delete-orphan")
 
@@ -188,3 +190,70 @@ class Call(Base):
                                                  onupdate=func.now())
 
     responder: Mapped[Responder | None] = relationship()
+
+
+class Site(Base):
+    """A factory, campus or office. Buildings belong to a site."""
+
+    __tablename__ = "sites"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+
+class Building(Base):
+    __tablename__ = "buildings"
+    __table_args__ = (UniqueConstraint("site_id", "name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    site_id: Mapped[int] = mapped_column(ForeignKey("sites.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+
+
+class Area(Base):
+    """A room or an open area inside a building. Cameras and badge readers are placed in areas."""
+
+    __tablename__ = "areas"
+    __table_args__ = (UniqueConstraint("building_id", "name"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    building_id: Mapped[int] = mapped_column(ForeignKey("buildings.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    kind: Mapped[str] = mapped_column(String(16), default="room")  # room or area
+
+
+class GuardProfile(Base):
+    """A guard's post and equipment, plus personal details that are encrypted at rest.
+
+    The link to the login is user_id. `personal` is a Fernet token of JSON with badge_number, badge_id,
+    security_number and emergency_contact. `badge_hash` is an HMAC of the badge number, so a badge scan can
+    find the guard without decrypting every row. Saving replaces the whole record; only field names are logged.
+    """
+
+    __tablename__ = "guard_profiles"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    position: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    site_id: Mapped[int | None] = mapped_column(ForeignKey("sites.id", ondelete="SET NULL"), nullable=True)
+    post: Mapped[str | None] = mapped_column(String(120), nullable=True)  # the area or gate he is posted at
+    equipment: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    has_phone: Mapped[bool] = mapped_column(Boolean, default=False)
+    personal: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    badge_hash: Mapped[str | None] = mapped_column(String(64), unique=True, nullable=True, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_by: Mapped[str] = mapped_column(String(120), default="")
+
+
+class BadgeScan(Base):
+    """A guard's badge read at a door or reader. A restricted entry with no scan in its area is 'no badge'."""
+
+    __tablename__ = "badge_scans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+                                                index=True)
+    area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True,
+                                                index=True)
+    reader: Mapped[str] = mapped_column(String(120), default="")  # which reader or laptop did the scan

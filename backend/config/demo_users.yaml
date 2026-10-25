@@ -10,19 +10,19 @@ users:
     name: Anita Rao
     role: Admin
     cameras: []
-    actions: [all_cameras, ack, resolve, manage_users, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant]
+    actions: [all_cameras, ack, resolve, manage_users, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant, manage_sites, manage_guards, view_guard_details, scan_badges]
   - key: vikram
     name: Vikram Shah
     role: Manager
     cameras: [cam-door, cam-floor, cam-entrance, cam-webcam]
-    actions: [ack, resolve, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant]
+    actions: [ack, resolve, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant, delegate_cameras]
   - key: ravi
     name: Ravi Kumar
     role: Head Guard
     cameras: [cam-door, cam-floor, cam-entrance, cam-webcam]
-    actions: [ack, resolve, alert_all, broadcast, assistant]
+    actions: [ack, resolve, alert_all, broadcast, assistant, scan_badges]
   - key: suresh
     name: Suresh Babu
     role: Guard
     cameras: [cam-door, cam-entrance]   # not the shop floor: shows that a guard only sees their own cameras
-    actions: [ack]
+    actions: [ack, scan_badges]
