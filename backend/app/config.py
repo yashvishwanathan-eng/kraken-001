@@ -5,7 +5,7 @@ import yaml
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-PRODUCT_NAME = "SafetyAI"  # placeholder name; change here only
+PRODUCT_NAME = "RingGuard"  # the product name; change here only
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 

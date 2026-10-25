@@ -170,7 +170,7 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="SafetyAI camera worker")
+    parser = argparse.ArgumentParser(description="RingGuard camera worker")
     parser.add_argument("--camera", required=True, help="camera id from config/cameras.yaml")
     parser.add_argument("--seconds", type=float, default=0, help="stop after N seconds (0 = run forever)")
     parser.add_argument("--source", help="testing only: use this video file or URL instead of the config source")
