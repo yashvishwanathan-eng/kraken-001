@@ -10,8 +10,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import PRODUCT_NAME, get_settings, media_root
 from app.routers import (
-    assistant, audit, auth, broadcast, cameras, events, health, internal, responders, roll_call, share, stats, stream,
-    twilio, users, zones,
+    assistant, audit, auth, broadcast, cameras, events, health, internal, invites, responders, roll_call, share, stats,
+    stream, summary, twilio, users, zones,
 )
 from app.services.calls import calls
 from app.services.escalation import escalation
@@ -70,5 +70,5 @@ async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
 app.mount("/media", StaticFiles(directory=media_root()), name="media")
 
 for module in (health, auth, users, cameras, stream, zones, events, stats, audit, responders, roll_call, broadcast,
-               assistant, twilio, share, internal):
+               assistant, twilio, share, internal, invites, summary):
     app.include_router(module.router)

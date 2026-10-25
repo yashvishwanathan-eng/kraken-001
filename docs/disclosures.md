@@ -37,6 +37,10 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - tzdata (Apache-2.0): time zone data so IST works on Windows.
 - pytest (MIT): tests.
 
+## Email and QR codes (in use, P19)
+- qrcode 8.2 (BSD licence): draws the invitation QR code as a PNG on the laptop.
+- SMTP email (the provider is chosen by Kirito: a Gmail app password, Outlook, or a school mail server): sends the invitation link. Only the invitee's address and the link leave the laptop.
+
 ## External services and databases (in use)
 - PostgreSQL 16 (PostgreSQL licence), local on the event laptop.
 - FFmpeg (LGPL-2.1+/GPL depending on build; we call the `ffmpeg` command, libx264 is GPL-2.0): re-encodes incident clips to H.264 MP4.

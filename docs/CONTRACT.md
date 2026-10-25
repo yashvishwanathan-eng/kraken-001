@@ -37,6 +37,12 @@ Status tags:
 
 | Method | Path | Status | Request | Response / notes |
 |---|---|---|---|---|
+| POST | /invites | live (P19) | `{name, email, role, camera_ids[], actions[]}` (manage_users) | 201 `{invite_id, user_id, name, email, role, status, expires_at, created_by, link, qr_png, email_status}`. The account is created inactive; `email_status` is sent, simulated, not_sent or off. 409 if a pending invite exists for that email. |
+| GET | /invites | live (P19) | | list of invitations (manage_users) |
+| POST | /invites/{invite_id}/revoke | live (P19) | | cancels a pending invitation; 409 otherwise |
+| GET | /invites/link/{token} | live (P19) | | public: `{name, email, role, expires_at}`; 404 if unknown, used, expired or revoked |
+| POST | /invites/link/{token}/accept | live (P19) | `{pin}` | public: sets the PIN, activates the account, returns `{token, user}` (same as login). One use. 409 if the PIN is taken. |
+| GET | /summary | live (P20) | query `from`, `to` (optional; default today from local midnight IST) | `{from, to, sector:{all_cameras, camera_ids[]}, incidents:{total, by_status, by_type}, violations:{restricted_entries, still_open, items[]}, cameras[], logins[], text}`. `logins` only for users with view_audit. 422 if `to` is not after `from`. |
 | GET | /health | live | | `{cameras:[{id,online,fps}], db, twilio, llm}`. `db`: ok, error, not_checked. `twilio`: ok, not_configured, error, not_checked. `llm`: ok, ollama_only, error, not_checked. |
 | POST | /auth/pin | live | `{pin}` | `{token, user:{id,name,role}}` |
 | GET | /me | live | | `{id, name, role, camera_ids[], actions[]}` |
@@ -118,7 +124,11 @@ Gate 2 needed these details, which the contract did not settle. The backend does
 - **P17. Public address.** When the API is reached through `PUBLIC_BASE_URL` (ngrok), only `/twilio/*` and `/share/*` answer; everything else is 404 there. The dashboard always uses the local address.
 - **P18. Health.** `twilio` is `ok` when the Twilio keys and public URL are set, else `not_configured`. `llm` is `ok` when Groq is set up, `ollama_only` when only Ollama is, `not_checked` when neither is.
 
+- **P19. Invitations.** Admins invite people by email (`POST /invites`). The email has a link, and the response has the same link as a QR code (`qr_png`, a PNG data URL) for a laptop screen or a phone camera. An invitation link works once, for 48 h, and only from the address in `DASHBOARD_URL`. Accepting it sets the PIN and logs the person in. No SMS is sent. Offline, the QR code is enough: scanning it opens the accept page on the same network. `email_status` tells the dashboard whether the email left (sent), was logged only (simulated), failed (not_sent) or was switched off (off), so the admin can share the link by hand.
+- **P20. Sector summaries.** `GET /summary` covers the cameras the caller may see: a Head Guard sees their own cameras, an Admin (`all_cameras`) sees the overview of every camera. `violations` are restricted-area entries (access incidents); with none, `text` says "No violations". `text` is built from the counts only, so the dashboard can read it aloud. Login logs appear only for users with `view_audit`.
+
 ## Changelog
+- 25 Oct: P19 (invitations by email, with a link and a QR code) and P20 (sector summaries) are live on the backend for the frontend to build. P19 and P20 are agreed by Kirito; the frontend builds the screens.
 - 18 Oct: added the endpoints above. `POST /events/{id}/ack` no longer takes `by`.
 - 18 Oct: confirmed by Kirito: the nine endpoints, the timeline actions, the extra WebSocket messages, and the signed stream URL with `GET /cameras/{id}/stream-url`. Stream tokens are 1 hour, one camera each.
 - 21 Oct (later): escalation, Twilio webhooks, alert everybody, roll call, broadcast and the assistant are live. Proposed clarifications P11 to P18 added for sign-off.

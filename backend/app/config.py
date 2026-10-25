@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     stream_secret: str = ""  # signs stream URLs; if empty, a random one is made at startup (URLs die on restart)
     demo_user_pins: str = ""  # "anita=1111,vikram=2222,..." used only by python -m app.seed
     demo_responder_phones: str = ""  # "anita=+9198...,ravi=+9198..." used only by python -m app.seed
+    dashboard_url: str = "http://localhost:5173"  # where invitation links and QR codes point (the laptop's address)
+    invite_ttl_h: float = 48.0  # an invitation link works for this long
+    email_mode: str = "auto"  # auto, live, simulate, off
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""  # secret: .env only
+    smtp_from: str = ""  # e.g. "RingGuard <alerts@example.com>"
     fire_station_number: str = ""  # only ever dialled when a human orders it and says "yes"
     site_address: str = ""  # read to the fire station on that call, e.g. "Plot 12, Hosur Road, Bengaluru"
     ppe_model_path: str = ""  # helmet/vest model (.pt); empty = PPE rule off until a model is chosen

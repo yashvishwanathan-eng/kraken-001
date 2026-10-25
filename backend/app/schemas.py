@@ -327,3 +327,97 @@ class ConfirmOut(BaseModel):
     answer: str
     ms: int
     data: dict
+
+
+# ---------- P19. Invitations ----------
+
+class InviteCreate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+    email: Annotated[str, Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=254)]
+    role: Annotated[str, Field(min_length=1, max_length=32)]
+    camera_ids: list[str] = []
+    actions: list[str] = []
+
+
+class InviteOut(BaseModel):
+    invite_id: int
+    user_id: int
+    name: str
+    email: str
+    role: str
+    status: Literal["pending", "accepted", "expired", "revoked"]
+    expires_at: datetime
+    created_by: str
+
+
+class InviteCreated(InviteOut):
+    link: str  # the link in the email and QR code; shown once, not stored
+    qr_png: str  # data:image/png;base64,... for the dashboard to show
+    email_status: Literal["sent", "simulated", "not_sent", "off"]
+
+
+class InvitePreview(BaseModel):
+    name: str
+    email: str
+    role: str
+    expires_at: datetime
+
+
+class InviteAccept(BaseModel):
+    pin: Pin
+
+
+# ---------- P20. Sector summaries ----------
+
+class SummaryIncidents(BaseModel):
+    total: int
+    by_status: dict[str, int]
+    by_type: dict[str, int]
+
+
+class SummaryEntry(BaseModel):
+    incident_id: int
+    at: datetime
+    camera_id: str
+    zone: str | None
+    status: str
+    acknowledged_by: str | None
+
+
+class SummaryViolations(BaseModel):
+    restricted_entries: int
+    still_open: int
+    items: list[SummaryEntry]
+
+
+class SummaryCamera(BaseModel):
+    camera_id: str
+    name: str
+    online: bool
+    fps: float
+    incidents: int
+    open: int
+
+
+class SummaryLogin(BaseModel):
+    at: datetime
+    user_name: str
+    channel: str
+
+
+class SummarySector(BaseModel):
+    all_cameras: bool
+    camera_ids: list[str]
+
+
+class SummaryOut(BaseModel):
+    from_: datetime = Field(alias="from")
+    to: datetime
+    sector: SummarySector
+    incidents: SummaryIncidents
+    violations: SummaryViolations
+    cameras: list[SummaryCamera]
+    logins: list[SummaryLogin]  # empty unless the caller may view the audit log
+    text: str  # plain English, built from the counts above; read aloud by the dashboard
+
+    model_config = {"populate_by_name": True}

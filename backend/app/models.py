@@ -119,6 +119,22 @@ class AuditLog(Base):
     detail: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
 
+class Invitation(Base):
+    """An emailed/QR invitation. The user row is created inactive; accepting sets the PIN and activates it."""
+
+    __tablename__ = "invitations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)  # SHA-256; the token is never stored
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    email: Mapped[str] = mapped_column(String(254))
+    created_by: Mapped[str] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class Session(Base):
     """One row per logged-in browser. Only a SHA-256 hash of the token is stored, never the token."""
 

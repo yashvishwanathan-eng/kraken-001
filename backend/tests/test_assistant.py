@@ -233,12 +233,13 @@ def test_sample_sop_is_answerable(roster):
 
 def test_voice_question(roster, monkeypatch):
     make_incident(roster, type_="fall", severity="critical")
-    monkeypatch.setattr("app.routers.assistant.transcribe", lambda data, name, ctype: ("any falls today", "groq"))
+    # "in the last hour" rather than "today": the test must not depend on the time of day (midnight IST)
+    monkeypatch.setattr("app.routers.assistant.transcribe", lambda data, name, ctype: ("any falls in the last hour", "groq"))
     response = client.post("/assistant/voice", files={"audio": ("q.webm", b"fake-audio", "audio/webm")},
                            headers=login(client, "1111"))
     assert response.status_code == 200, response.text
     body = response.json()
-    assert body["transcript"] == "any falls today" and len(body["incidents"]) == 1
+    assert body["transcript"] == "any falls in the last hour" and len(body["incidents"]) == 1
 
 
 def test_voice_rejects_non_audio_and_reports_missing_stt(roster, monkeypatch):
