@@ -139,9 +139,11 @@ VOSK_GRAMMAR = ["hey friday", "hey", "friday", "[unk]"]
 
 
 def heard_wake(text: str) -> bool:
-    """True when the recognised words contain "hey friday" in that order (anything around it is ignored)."""
+    """True when what was said STARTS with "hey friday" (at most one sound before it, like "uh").
+    Vosk splits speech at pauses, so this means: a pause, then "Hey Friday". In a room where people keep
+    talking, the two words can turn up by chance in the middle of a sentence; those never count."""
     words = text.lower().split()
-    return any(words[i:i + 2] == list(WAKE_WORDS) for i in range(len(words) - 1))
+    return words[0:2] == list(WAKE_WORDS) or words[1:3] == list(WAKE_WORDS)
 
 
 class VoskWake:

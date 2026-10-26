@@ -155,6 +155,8 @@ def test_heard_wake_needs_hey_then_friday():
 
     assert heard_wake("hey friday") and heard_wake("[unk] hey friday [unk]") and heard_wake("HEY FRIDAY")
     assert not heard_wake("friday") and not heard_wake("friday hey") and not heard_wake("hey [unk] friday")
+    # people talking nearby: the words turn up mid-sentence, after other speech -> never a wake
+    assert not heard_wake("[unk] [unk] [unk] hey friday")
 
 
 class FakeRecognizer:
