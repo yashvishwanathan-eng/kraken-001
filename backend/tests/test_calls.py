@@ -55,8 +55,11 @@ def test_queue_dials_everyone_at_the_rate_limit(live, roster):
     assert wait_until(lambda: len(fake.dialled) == 4)
     gaps = [b[1] - a[1] for a, b in zip(fake.dialled, fake.dialled[1:])]
     assert all(gap >= 0.03 for gap in gaps)  # never faster than twilio_cps (50 ms); 30 ms allows thread-wakeup jitter
-    roster.expire_all()
-    assert {roster.get(Call, i).call_sid for i in ids} == {f"CA{i}" for i in ids}
+    def saved():  # the dispatcher writes the sid just after Twilio answers
+        roster.expire_all()
+        return {roster.get(Call, i).call_sid for i in ids} == {f"CA{i}" for i in ids}
+
+    assert wait_until(saved)
 
 
 def test_rejected_number_is_marked_failed_not_retried(live, roster):

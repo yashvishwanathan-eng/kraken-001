@@ -253,6 +253,7 @@ def test_websocket_only_sends_delegated_cameras(seeded):
     webcam = add_incident(seeded, "cam-webcam")
     key = {"X-Internal-Key": get_settings().internal_key}
     with TestClient(app) as live, live.websocket_connect(f"/ws/events?token={token}") as ws:
+        assert ws.receive_json() == {"kind": "speaker", "active": True}  # his only dashboard speaks
         live.post(f"/internal/incidents/{phone}/created", headers=key)  # not his camera: must not arrive
         live.post(f"/internal/incidents/{webcam}/created", headers=key)
         assert ws.receive_json()["id"] == webcam

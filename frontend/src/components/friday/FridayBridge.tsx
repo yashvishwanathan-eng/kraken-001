@@ -12,7 +12,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { Siren } from 'lucide-react'
 import { acknowledgeEvent } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
-import { showState, speak } from '@/lib/friday'
+import { isSpeaker, setSpeaker, showState, speak } from '@/lib/friday'
 import { wsClient } from '@/lib/ws'
 import type { Incident } from '@/lib/types'
 
@@ -27,6 +27,7 @@ interface FridayNotice {
   heard?: string
   answer?: string
   speak_for_user_id?: number | null
+  camera_ids?: string[] | null
 }
 
 function incidentFrom(event: unknown): Incident | null {
@@ -54,10 +55,17 @@ export function FridayBridge() {
 
   useEffect(() => wsClient.subscribe(event => {
     const notice = event as unknown as FridayNotice
+    const kind = (event as { kind?: string } | null)?.kind
+    if (kind === 'speaker') {
+      setSpeaker(Boolean((event as unknown as { active?: boolean }).active))
+      return
+    }
     if (notice && typeof notice === 'object' && notice.kind === 'friday') {
+      // "show cameras 3 and 4": open them now, while she is still talking
+      if (notice.camera_ids?.length) navigate(`/live?cameras=${encodeURIComponent(notice.camera_ids.join(','))}`)
       if (notice.state === 'listening' && pathRef.current !== '/assistant') navigate('/assistant')
       showState(notice.state === 'speaking' ? 'speaking' : notice.state, { heard: notice.heard, answer: notice.answer })
-      if (notice.state === 'speaking' && notice.answer && notice.speak_for_user_id && String(notice.speak_for_user_id) === String(user?.id)) {
+      if (notice.state === 'speaking' && notice.answer && isSpeaker() && notice.speak_for_user_id && String(notice.speak_for_user_id) === String(user?.id)) {
         void speak(notice.answer)
       }
       return
@@ -69,7 +77,7 @@ export function FridayBridge() {
     announced.current.add(inc.id)
     setAlarm(inc)
     showState('alarm')
-    void speak(alarmSentence(inc))
+    if (isSpeaker()) void speak(alarmSentence(inc))
   }), [navigate, user?.id])
 
   const acknowledge = async () => {

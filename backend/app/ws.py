@@ -41,10 +41,21 @@ class ConnectionManager:
         self._clients[websocket] = allow
         if user_id is not None:
             self._users[websocket] = user_id
+            await self.announce_speaker(user_id)
 
     def disconnect(self, websocket: WebSocket) -> None:
         self._clients.pop(websocket, None)
         self._users.pop(websocket, None)
+
+    async def announce_speaker(self, user_id: int) -> None:
+        """A user may have several dashboards open (two browsers, two tabs). Only the newest one speaks Friday's
+        answers and alarms, so nothing is heard twice: each of that user's dashboards is told whether it is it."""
+        mine = [ws for ws, uid in self._users.items() if uid == user_id]  # in connection order
+        for websocket in mine:
+            try:
+                await websocket.send_json({"kind": "speaker", "active": websocket is mine[-1]})
+            except Exception:
+                self.disconnect(websocket)
 
     def online_user_ids(self) -> set[int]:
         """Users with at least one dashboard open right now. The call ladder gives them 5 s on screen first."""

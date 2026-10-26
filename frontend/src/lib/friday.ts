@@ -264,6 +264,17 @@ export function showState(state: FridayState, fields: { heard?: string; answer?:
   set({ state, ...fields })
 }
 
+/* ── one speaker per user ─────────────────────────────────
+ * The same user may have the app open twice (Edge and another browser). The server tells each dashboard
+ * whether it is the newest one; only that one speaks alarms and wake-word answers, so nothing is heard twice. */
+let speakerHere = true
+export function setSpeaker(active: boolean): void {
+  speakerHere = active
+}
+export function isSpeaker(): boolean {
+  return speakerHere
+}
+
 export function clearCameraRequest(): void {
   set({ cameraIds: null })
 }

@@ -51,13 +51,13 @@ export function AssistantPage() {
     }
   }, [])
 
-  // "Show cameras 3, 4 and 12": open them on the Live page
+  // "Show cameras 3, 4 and 12": open them on the Live page at once (her answer keeps playing)
   useEffect(() => {
-    if (!friday.cameraIds || friday.state === 'speaking') return
+    if (!friday.cameraIds) return
     const ids = friday.cameraIds
     clearCameraRequest()
     navigate(`/live?cameras=${encodeURIComponent(ids.join(','))}`)
-  }, [friday.cameraIds, friday.state, navigate])
+  }, [friday.cameraIds, navigate])
 
   const submit = (value: string) => {
     setText('')

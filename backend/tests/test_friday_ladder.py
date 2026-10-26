@@ -81,8 +81,14 @@ def test_ws_manager_tracks_online_users():
     import asyncio
 
     class FakeSocket:
+        def __init__(self):
+            self.got = []
+
         async def accept(self):
             pass
+
+        async def send_json(self, message):
+            self.got.append(message)
 
     m = ConnectionManager()
     a, b = FakeSocket(), FakeSocket()
@@ -90,6 +96,30 @@ def test_ws_manager_tracks_online_users():
     asyncio.run(m.connect(b, lambda _: True, user_id=2))
     m.disconnect(a)
     assert m.online_user_ids() == {2}
+
+
+def test_only_the_newest_dashboard_of_a_user_speaks():
+    import asyncio
+
+    class FakeSocket:
+        def __init__(self):
+            self.got = []
+
+        async def accept(self):
+            pass
+
+        async def send_json(self, message):
+            self.got.append(message)
+
+    m = ConnectionManager()
+    edge, antigravity = FakeSocket(), FakeSocket()
+    asyncio.run(m.connect(edge, lambda _: True, user_id=1))
+    asyncio.run(m.connect(antigravity, lambda _: True, user_id=1))
+    assert edge.got[-1] == {"kind": "speaker", "active": False}
+    assert antigravity.got[-1] == {"kind": "speaker", "active": True}
+    m.disconnect(antigravity)
+    asyncio.run(m.announce_speaker(1))
+    assert edge.got[-1] == {"kind": "speaker", "active": True}  # the one left takes over
 
 
 def test_ack_on_screen_records_the_cancelled_call(ladder, roster, monkeypatch):

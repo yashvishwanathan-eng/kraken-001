@@ -138,3 +138,4 @@ async def ws_events(websocket: WebSocket, token: str = "") -> None:
             await websocket.receive_text()  # the dashboard may send pings; we only listen to keep it open
     except WebSocketDisconnect:
         manager.disconnect(websocket)
+        await manager.announce_speaker(user.id)  # the newest remaining dashboard takes over speaking

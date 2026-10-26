@@ -201,7 +201,8 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
                                       "A fire has been reported. Please send help.")
         _audit(user, "call_fire_station", "fire_station")
         return CommandResult(intent, "done" if call_id else "refused",
-                             "Calling the fire station." if call_id else "Calls are off; please phone them directly.")
+                             f"Calling the fire station.{_pretend()}" if call_id
+                             else "Calls are off; please phone them directly.")
 
     if intent == "call_person":
         with SessionLocal() as db:
@@ -214,7 +215,7 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
                                       "control room or call back.")
         _audit(user, "call_person", f"responder:{contact.responder_id}")
         return CommandResult(intent, "done" if call_id else "refused",
-                             f"Calling {contact.name}." if call_id else "Calls are off right now.")
+                             f"Calling {contact.name}.{_pretend()}" if call_id else _calls_off())
 
     if intent == "call_zone":
         zone = (args.get("zone") or "").strip().replace(" ", "-")
@@ -227,7 +228,8 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
         if not contacts:
             return CommandResult(intent, "refused", f"Nobody is on shift in {zone.replace('-', ' ')}.")
         note = " Nobody there is checked in on duty, so I used the shift roster." if fallback else ""
-        return CommandResult(intent, "done", f"Calling {len(placed)} people in {zone.replace('-', ' ')}.{note}")
+        return CommandResult(intent, "done",
+                             f"Calling {len(placed)} people in {zone.replace('-', ' ')}.{note}{_pretend()}")
 
     if intent == "broadcast_message":
         message = args.get("text") or text
@@ -430,6 +432,15 @@ def _duty_report(user: User) -> str:
     if not on:
         answer += " Alerts will go to the shift roster until someone checks in."
     return answer
+
+
+def _pretend() -> str:
+    """Say it plainly when nobody's phone will really ring."""
+    return " This is only a pretend call: set CALLS_MODE to live to really call." if calls.mode == "simulate" else ""
+
+
+def _calls_off() -> str:
+    return "Calls are off: fill the Twilio keys and set CALLS_MODE to live."
 
 
 def _audit(user: User, action: str, target: str, detail: dict | None = None) -> None:

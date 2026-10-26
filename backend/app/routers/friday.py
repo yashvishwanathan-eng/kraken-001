@@ -59,8 +59,16 @@ def friday_user() -> User:
         return user
 
 
-def _notice(state: str, heard: str | None = None, answer: str | None = None, speak_for: int | None = None) -> dict:
-    return {"kind": "friday", "state": state, "heard": heard, "answer": answer, "speak_for_user_id": speak_for}
+def _notice(state: str, heard: str | None = None, answer: str | None = None, speak_for: int | None = None,
+            camera_ids: list[str] | None = None) -> dict:
+    """camera_ids: "show cameras 3 and 4" -> the dashboard opens the Live page with them at once."""
+    return {"kind": "friday", "state": state, "heard": heard, "answer": answer, "speak_for_user_id": speak_for,
+            "camera_ids": camera_ids}
+
+
+def _cameras(result) -> list[str] | None:
+    ids = result.data.get("camera_ids") if result is not None and result.intent == "show_camera" else None
+    return list(ids) if ids else None
 
 
 @router.post("/event", response_model=FridayEventOut)
@@ -115,7 +123,8 @@ async def voice_command(audio: UploadFile = File(...), confirm_token: str | None
         "text": transcript, "intent": result.intent, "status": result.status, "answer": result.answer,
         "source": result.data.get("source"), "via": "wake word"})
     await _push(result.notices)
-    await manager.broadcast(_notice("speaking", transcript, result.answer, user.id if on_screen else None))
+    await manager.broadcast(_notice("speaking", transcript, result.answer, user.id if on_screen else None,
+                                    _cameras(result)))
     return ListenerCommandOut(transcript=transcript, intent=result.intent, status=result.status, answer=result.answer,
                               confirm_token=result.confirm_token, ms=int((time.perf_counter() - t0) * 1000),
                               data=result.data, spoken_by=spoken_by)

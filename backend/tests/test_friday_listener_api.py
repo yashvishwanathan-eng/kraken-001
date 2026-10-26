@@ -49,6 +49,7 @@ def test_wake_event_says_whether_the_software_is_open(roster, key, sent, monkeyp
         "heard": None,
         "answer": None,
         "speak_for_user_id": None,
+        "camera_ids": None,
     }
     monkeypatch.setattr(manager, "online_user_ids", lambda: {anita_id(roster)})
     assert client.post("/internal/friday/event", json={"state": "listening"}, headers=key).json()["friday_user_online"]
@@ -64,6 +65,20 @@ def test_listener_voice_command_acts_as_friday_user(roster, key, sent, monkeypat
     assert (body["transcript"], body["intent"], body["spoken_by"]) == ("who is on duty", "on_duty", "dashboard")
     speaking = [m for m in sent if m.get("kind") == "friday" and m["state"] == "speaking"][-1]
     assert speaking["answer"].startswith("1 on duty") and speaking["speak_for_user_id"] == anita_id(roster)
+
+
+def test_show_cameras_by_voice_sends_the_cameras_to_the_dashboard(roster, key, sent, monkeypatch):
+    monkeypatch.setattr(friday_router, "transcribe", lambda data, name, ctype: ("show cameras 1 and 2", "groq"))
+    out = client.post("/internal/friday/voice-command", files=AUDIO, headers=key).json()
+    assert out["intent"] == "show_camera"
+    speaking = [m for m in sent if m.get("kind") == "friday" and m["state"] == "speaking"][-1]
+    assert speaking["camera_ids"] and len(speaking["camera_ids"]) == 2
+
+
+def test_a_pretend_call_says_so(roster, key, sent, monkeypatch, simulate):
+    monkeypatch.setattr(friday_router, "transcribe", lambda data, name, ctype: ("call ravi kumar", "groq"))
+    out = client.post("/internal/friday/voice-command", files=AUDIO, headers=key).json()
+    assert out["intent"] == "call_person" and "pretend call" in out["answer"]
 
 
 def test_listener_speaks_itself_when_nobody_has_the_software_open(roster, key, sent, monkeypatch):
