@@ -1,6 +1,6 @@
 # Friday: the voice assistant (design)
 
-Date: 26 Oct 2026. Status: waiting for Kirito's approval. Nothing here is built yet.
+Date: 26 Oct 2026. Status: approved by Kirito on 26 Oct, with a 5 s grace period instead of 20 s.
 
 ## 1. What we agreed
 
@@ -69,8 +69,10 @@ Two ways in, same brain:
 ### 3.5 Calls depend on who is on the software (option A; changes the confirmed ladder)
 - The WebSocket manager remembers which user each dashboard belongs to, so the API knows who is "on the software" right now.
 - For the **Admin and Manager call steps**:
-  - **Not on the software:** the call is placed at 0 s (today: Admin at 60 s, Manager at 120 s for critical).
-  - **On the software:** red glow and voice first, then a grace period of `ONSCREEN_GRACE_S=20`. Acknowledging on screen, by voice or by keypad stops the ladder, so the call is never placed. No reaction: the call goes out after 20 s.
+  - **Not on the software:** the call is placed at 0 s (until now: Admin at 60 s, Manager at 120 s for critical).
+  - **On the software:** red glow and voice first, then a grace period of `ONSCREEN_GRACE_S=5`. Acknowledging on screen, by voice or by keypad stops the ladder, so the call is never placed. No reaction: the call goes out after 5 s.
+  - The Manager stays the fallback after the Admin: their call follows the same rule, one grace period later (critical: Admin at 0 or 5 s, Manager at 5 or 10 s; high: Manager at 0 or 5 s). The Twilio queue (1 new call per second) keeps the order.
+  - The settings `CRITICAL_ADMIN_DELAY_S`, `CRITICAL_MANAGER_DELAY_S` and `HIGH_MANAGER_DELAY_S` are replaced by this rule; CLAUDE.md "Escalation and calls" is updated to match.
 - The Head Guard call at 0 s and every WhatsApp stay exactly as they are. "Never call above Admin" and the high-severity rule (Admin gets WhatsApp only) stay.
 - The call script says: *"RingGuard alert. Fire detected at Shop Floor ... Press 1 if you are going."* (already the alert text).
 
@@ -101,7 +103,7 @@ wake, then the cached "Yes, boss", then record until 1 s of silence (at most 12 
 - Nobody on the software and nobody answers: the existing ladder goes on unchanged.
 
 ## 7. Testing
-- Backend (pytest): voice-command with a fake STT and fake Rumik (transcript, intent, cached audio); TTS cache hit and miss; `speaker` choice; the grace period (on screen and acknowledged: no call; on screen without reaction: call at 20 s; not on screen: call at 0 s); the friday notice shapes; the listener loop with fake audio and fake HTTP.
+- Backend (pytest): voice-command with a fake STT and fake Rumik (transcript, intent, cached audio); TTS cache hit and miss; `speaker` choice; the grace period (on screen and acknowledged: no call; on screen without reaction: call at 5 s; not on screen: call at 0 s; Manager one grace period after the Admin); the friday notice shapes; the listener loop with fake audio and fake HTTP.
 - Frontend: `npm run build` and lint; a Playwright smoke test against the mock API (orb opens on a friday notice, alarm glow appears and clears on ack, show-cameras switches the Live page).
 - Live on the laptop: real mic, real Rumik key, timing printed for each step.
 
