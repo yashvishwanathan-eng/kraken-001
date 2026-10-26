@@ -52,3 +52,17 @@ def test_face_recognition_starts_only_with_a_restricted_area(monkeypatch):
     room = ZoneDef("room", "restricted", [(0, 0), (1, 0), (1, 1)], None)
     assert run_worker.start_faces("cam", [work]) is None
     assert run_worker.start_faces("cam", [work, room]) is not None
+
+
+def test_live_view_colours_allowed_green_and_others_red():
+    import numpy as np
+
+    from worker.detectors import Person
+
+    room = ZoneDef("room", "restricted", [(0, 0), (1, 0), (1, 1), (0, 1)], None, frozenset({"Yash"}))
+    no_pose = [(0.0, 0.0, 0.0)] * 17
+    yash = Person(1, (10, 10, 40, 90), 0.9, no_pose)
+    stranger = Person(2, (60, 10, 90, 90), 0.9, no_pose)
+    image = run_worker.annotate(np.zeros((100, 100, 3), np.uint8), [room], [yash, stranger], "", {1: "Yash", 2: ""})
+    assert tuple(image[50, 10]) == (0, 200, 0)  # left edge of Yash's box: green
+    assert tuple(image[50, 60]) == (0, 0, 255)  # left edge of the stranger's box: red

@@ -127,15 +127,21 @@ def annotate(image: np.ndarray, zones: list[ZoneDef], people: list[Person], fps_
         colour = ZONE_COLOURS.get(zone.kind, (200, 200, 200))
         cv2.polylines(out, [points], isClosed=True, color=colour, thickness=2)
         cv2.putText(out, zone.name, tuple(points[0]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, colour, 1)
+    restricted = [z for z in zones if z.kind == "restricted"]
     for person in people:
         x1, y1, x2, y2 = (int(v) for v in person.xyxy)
-        cv2.rectangle(out, (x1, y1), (x2, y2), (0, 200, 0), 2)
         angle = torso_angle_deg(person.keypoints)
         angle_text = "" if angle is None else f" {angle:.0f}deg"
         name = (names or {}).get(person.track_id)
         label = f"{name}" if name else f"ID {person.track_id}{angle_text}"  # a recognised face shows its name
-        cv2.putText(out, label, (x1, max(y1 - 6, 12)),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 0), 1)
+        colour = (0, 200, 0)
+        inside = [z for z in restricted if point_in_polygon(((x1 + x2) / 2 / w, y2 / h), z.polygon)]
+        if inside:  # in a restricted area: green = allowed by face, red = unknown face, no face or not allowed
+            allowed = bool(name) and all(name in z.allowed for z in inside)
+            colour = (0, 200, 0) if allowed else (0, 0, 255)
+            label = f"{name} (allowed)" if allowed else f"{name} (NOT allowed)" if name else "unknown"
+        cv2.rectangle(out, (x1, y1), (x2, y2), colour, 2)
+        cv2.putText(out, label, (x1, max(y1 - 6, 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2)
     cv2.putText(out, fps_text, (8, 22), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
     return out
 
