@@ -12,11 +12,14 @@ it out with the same rules as the keypad (a critical incident can only be acknow
 "alert all guards" needs a yes first; nobody but a human on the dashboard can call the fire station).
 Without an LLM (offline, timeout) a keyword matcher picks the action and the reply comes from templates.
 
-Every sentence the person says is reported to the control room (dashboard + audit log).
-Conversations live in memory for the length of the call (one API process); that is all they need.
+Every sentence (hers and theirs) is saved in the Conversations history (services/conversations.py).
+"I'm going / heading there" is understood at once, without the LLM, so the call ends in a second.
+Alert and roll-call calls sound urgent: short tense sentences, and the Rumik voice is asked for urgency.
+The in-call memory lives for the length of the call (one API process); the history is in the database.
 """
 
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass, field
@@ -71,7 +74,9 @@ WORDS = [  # fallback when no LLM answers; first match wins
     ("safe", ("safe", "evacuated", "outside", "i'm out", "i am out")),
     ("ack", ("going", "coming", "on my way", "i'll go", "i will go", "on it", "handling", "yes", "okay", "ok")),
 ]
-FILLERS = ("Okay, one second.", "Got it. One moment.", "Alright, give me a second.")
+FILLERS = ("Okay, okay. One second.", "Right. Hold on.", "Got it, one moment.")
+GOING = re.compile(r"\b(going|heading|on my way|coming|running|be there|on it|rushing|moving now|i'?ll go|i will go)\b")
+NOT_GOING = re.compile(r"\b(not|can'?t|cannot|won'?t|unable|don'?t|no way)\b")
 # without an LLM: never the same sentence twice in a row
 FALLBACK_ALERT = (
     "Okay. Can you get there now?",
@@ -129,16 +134,27 @@ def situation(incident: Incident) -> str:
     return f"{what[0].upper()}{what[1:]} at {place(incident)}."
 
 
+def style_for(kind: str) -> str:
+    """Alerts and roll calls are emergencies: urgent voice. A plain "call Yash" stays calm."""
+    return "calm" if kind == "direct" else "urgent"
+
+
+def ack_reply(first: str) -> str:
+    return f"Go, {first}! I've told everyone you're on the way. Please be careful."
+
+
 def opening(call: Call, incident: Incident | None) -> str:
     """The first thing Friday says. No times or ids in it, so the audio can be made before they pick up."""
-    hi = f"Hi {first_name(call.to_name)}, this is Friday, {PRODUCT_NAME}'s AI."
+    name = first_name(call.to_name)
     if call.kind == "alert" and incident is not None:
-        return f"{hi} {situation(incident)} Where are you right now?"
+        return f"{name}, it's Friday from {PRODUCT_NAME}. {situation(incident)[:-1]}, right now! Where are you?"
     if call.kind == "roll_call":
-        problem = situation(incident) if incident is not None else (call.message or "There's an emergency.")
-        return f"{hi} {problem} Nobody has picked up yet, so I'm calling every guard. Can you respond? Where are you?"
+        problem = situation(incident)[:-1] if incident is not None else (call.message or "There's an emergency")
+        return (f"{name}, it's Friday from {PRODUCT_NAME}. Emergency! {problem.rstrip('.')}. Nobody has picked up, "
+                "so I'm calling every guard. Are you responding? Where are you?")
     message = call.message or "The control room needs you."
-    return f"{hi} {message} Can you come now, or should I connect you to the admin?"
+    return (f"Hi {name}, it's Friday from {PRODUCT_NAME}. {message} "
+            "Can you come now, or should I connect you to the admin?")
 
 
 def facts(call: Call, incident: Incident | None) -> str:
@@ -181,8 +197,11 @@ def _system_prompt(conv: Conversation) -> str:
     allowed = "\n".join(f'- "{name}": {meaning}' for name, meaning in ACTIONS[conv.kind].items())
     return (
         f"You are Friday, the AI of {PRODUCT_NAME}, a workplace safety system, speaking on a PHONE CALL to "
-        f"{conv.first_name}. Talk like a calm, quick human colleague in a control room: one or two short sentences "
-        "(at most 30 words), plain spoken English, no lists, no markdown, no ids, never say 'alert' like a robot. "
+        f"{conv.first_name}. "
+        + ("THIS IS AN EMERGENCY: sound urgent, serious and a little worried, never cheerful, no pleasantries, no "
+           "'great' or 'awesome'. " if conv.kind != "direct" else "Be friendly and brief. ")
+        + "Talk like a quick human colleague in a control room: one or two short sentences "
+        "(at most 25 words), plain spoken English, no lists, no markdown, no ids, never say 'alert' like a robot. "
         "Goals: find out where they are, get them to go and check or help, or arrange who else should be called. "
         "If they ask what happened, explain it simply from the facts. Never invent facts. Never promise to call the "
         "fire brigade or police: only a human on the dashboard can order that.\n"
@@ -230,6 +249,10 @@ def decide(conv: Conversation, said: str, digits: str) -> Turn:
         conv.history.append({"role": "user", "content": f"(pressed {digits[:1]})"})
         return Turn("", action) if action != "none" else Turn("Sorry, I didn't get that. Just tell me in words.")
     conv.history.append({"role": "user", "content": said})
+    lowered = said.lower()
+    if GOING.search(lowered) and not NOT_GOING.search(lowered) and not conv.asked_alert_all:
+        # "I'm heading there": no LLM, no waiting; the reply audio was made while the phone rang
+        return Turn("", {"alert": "ack", "roll_call": "responding", "direct": "coming"}[conv.kind])
     if conv.turns > MAX_TURNS:
         return Turn("I'll let the control room take it from here. Thank you.", "end")
     if conv.asked_alert_all:  # the answer to "shall I alert every guard?"

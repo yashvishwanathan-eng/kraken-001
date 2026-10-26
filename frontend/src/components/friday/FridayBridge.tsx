@@ -41,7 +41,7 @@ function incidentFrom(event: unknown): Incident | null {
 export function alarmSentence(i: Incident): string {
   const camera = i.camera_name || i.camera_id
   const firstCall = i.timeline.find(t => t.action === 'call_placed')?.to
-  return `${LABEL[i.type] ?? i.type} on ${camera}. ${firstCall ? `Calling ${firstCall}. ` : 'I am calling the head guard. '}` +
+  return `${LABEL[i.type] ?? i.type} on ${camera}! ${firstCall ? `I'm calling ${firstCall} now. ` : "I'm calling the head guard now. "}` +
     (i.severity === 'critical' ? 'Say evacuate to alert everyone, or acknowledge it.' : 'Acknowledge it when someone is on the way.')
 }
 
@@ -59,14 +59,6 @@ export function FridayBridge() {
     const kind = (event as { kind?: string } | null)?.kind
     if (kind === 'speaker') {
       setSpeaker(Boolean((event as unknown as { active?: boolean }).active))
-      return
-    }
-    if (kind === 'call_reply') {
-      // what someone said on a call Friday made: shown on her page and spoken on this laptop
-      const r = event as unknown as { from: string; text: string; connected_to?: string | null }
-      const line = r.connected_to ? `${r.from} asked for the admin. Connecting to ${r.connected_to}.` : `${r.from} says: ${r.text}`
-      showState('idle', { heard: `${r.from} on the phone`, answer: line })
-      if (isSpeaker()) void speak(line)
       return
     }
     if (notice && typeof notice === 'object' && notice.kind === 'friday') {
@@ -87,7 +79,7 @@ export function FridayBridge() {
     announced.current.add(inc.id)
     setAlarm(inc)
     showState('alarm')
-    if (isSpeaker()) void speak(alarmSentence(inc))
+    if (isSpeaker()) void speak(alarmSentence(inc), 'urgent') // an emergency: her urgent voice
   }), [navigate, user?.id])
 
   const acknowledge = async () => {

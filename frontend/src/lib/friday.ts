@@ -131,7 +131,7 @@ async function speakWithBrowser(text: string): Promise<void> {
 }
 
 /** Speak an answer: Rumik voice when it is set up, otherwise the browser's own voice. */
-export async function speak(text: string): Promise<void> {
+export async function speak(text: string, style: 'calm' | 'urgent' = 'calm'): Promise<void> {
   if (!text) return
   const turn = ++speakTurn
   stopSpeaking()
@@ -140,7 +140,7 @@ export async function speak(text: string): Promise<void> {
     const res = await fetch(`${API_URL}/assistant/speak`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken() ?? ''}` },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, style }),
     })
     if (!res.ok) throw new Error(`speak ${res.status}`)
     const audio = await res.arrayBuffer()

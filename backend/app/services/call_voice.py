@@ -27,9 +27,9 @@ _locks_guard = threading.Lock()
 _failed_at = float("-inf")
 
 
-def file_name(text: str) -> str:
+def file_name(text: str, style: str = "calm") -> str:
     s = get_settings()
-    key = f"{s.rumik_model}|{s.rumik_speaker}|{s.rumik_description}|{text}"
+    key = f"{s.rumik_model}|{s.rumik_speaker}|{tts.description_for(style)}|{text}"
     return f"tts_{hashlib.sha1(key.encode()).hexdigest()[:24]}.wav"
 
 
@@ -39,19 +39,19 @@ def enabled() -> bool:
             and s.public_base_url.startswith(("https://", "http://")))
 
 
-def audio_link(text: str) -> str | None:
+def audio_link(text: str, style: str = "calm") -> str | None:
     """Signed public link to this sentence in the Rumik voice (made now if needed), or None -> use <Say>."""
     global _failed_at
     if not text or not enabled() or time.monotonic() - _failed_at < RETRY_AFTER_S:
         return None
-    name = file_name(text)
+    name = file_name(text, style)
     path = media_root() / name
     with _locks_guard:
         lock = _locks.setdefault(name, threading.Lock())
     with lock:  # two webhooks asking for the same sentence: Rumik is asked once
         if not path.exists():
             try:
-                audio, ms = tts.speak(text)
+                audio, ms = tts.speak(text, style)
             except tts.TtsUnavailable as exc:
                 _failed_at = time.monotonic()
                 log.warning("call voice: Rumik failed (%s); Twilio's own voice for the next minute", exc)
@@ -61,15 +61,15 @@ def audio_link(text: str) -> str | None:
     return share_url(name)
 
 
-def prepare(text: str) -> None:
+def prepare(text: str, style: str = "calm") -> None:
     """Make the audio in the background while the phone is still ringing, so nobody waits after picking up."""
     if enabled():
-        threading.Thread(target=audio_link, args=(text,), name="call-voice", daemon=True).start()
+        threading.Thread(target=audio_link, args=(text, style), name="call-voice", daemon=True).start()
 
 
-def speech(text: str) -> str:
-    """TwiML that speaks this text: Rumik when possible, else Twilio's <Say>."""
-    link = audio_link(text)
+def speech(text: str, style: str = "calm") -> str:
+    """TwiML that speaks this text: Rumik when possible (calm or urgent), else Twilio's <Say>."""
+    link = audio_link(text, style)
     if link:
         return f"<Play>{escape(link)}</Play>"
     return f"<Say language={quoteattr(get_settings().call_language)}>{escape(text)}</Say>"

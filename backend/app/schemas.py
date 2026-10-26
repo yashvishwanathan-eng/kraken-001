@@ -808,6 +808,7 @@ class UsageOut(BaseModel):
 
 class SpeakIn(BaseModel):
     text: Annotated[str, Field(min_length=1, max_length=1000)]
+    style: Literal["calm", "urgent"] = "calm"  # urgent: the emergency voice (alarms), P31
 
 
 # ---------- demo alarm ----------
@@ -847,3 +848,29 @@ class RecordingAtOut(BaseModel):
     start: UtcDatetime
     end: UtcDatetime
     offset_s: float  # seconds into the file where that moment is
+
+
+# ---------- conversations with Friday (P31) ----------
+
+class ConversationTurnOut(BaseModel):
+    at: UtcDatetime
+    speaker: Literal["friday", "person"]
+    text: str
+    action: str | None  # what Friday did after it (ack, connect, show_camera...); for "person": typed, voice, wake word
+    audio_url: str | None  # the person's own voice clip (laptop orders)
+
+
+class ConversationSummary(BaseModel):
+    id: int
+    channel: Literal["phone", "laptop"]
+    person: str
+    incident_id: int | None
+    started_at: UtcDatetime
+    last_at: UtcDatetime
+    turns: int
+    last_text: str
+    recording_url: str | None  # the whole phone call's audio, once Twilio has sent it
+
+
+class ConversationOut(ConversationSummary):
+    lines: list[ConversationTurnOut]

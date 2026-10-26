@@ -5,6 +5,7 @@ faster-whisper downloads its model once on first use (about 500 MB for "small"),
 """
 
 import logging
+import re
 import tempfile
 import threading
 import time
@@ -68,8 +69,34 @@ def _local(data: bytes, filename: str) -> str:
             Path(path).unlink(missing_ok=True)
 
 
+# What Whisper "hears" in silence or room noise (it invents a polite ending). Treated as nothing said.
+HALLUCINATIONS = {"okay bye", "ok bye", "bye", "bye bye", "thank you", "thanks", "thank you for watching",
+                  "thanks for watching", "you", "okay", "ok", "so", "hmm", "uh", "um", "please subscribe",
+                  "thank you so much", "thank you very much", "okay thank you"}
+
+
+def cleaned(text: str) -> str:
+    """'' when the transcript is one of Whisper's silence inventions, or an echo of our own hint words."""
+    words = re.sub(r"[^a-z0-9' ]", " ", text.lower()).split()
+    plain = " ".join(words)
+    if not plain or plain in HALLUCINATIONS:
+        return ""
+    hint = " ".join(re.sub(r"[^a-z0-9' ]", " ", get_settings().stt_prompt.lower()).split())
+    if len(plain) > 15 and plain in hint:  # Whisper repeating the hint we gave it, not the user
+        return ""
+    return text.strip()
+
+
 def transcribe(data: bytes, filename: str, content_type: str) -> tuple[str, str]:
-    """Returns (text, source) with source 'groq' or 'local'."""
+    """Returns (text, source) with source 'groq' or 'local'. Silence comes back as ''."""
+    text, source = _transcribe(data, filename, content_type)
+    clean = cleaned(text)
+    if text and not clean:
+        log.info("step=stt ignored %r (silence or noise)", text[:60])
+    return clean, source
+
+
+def _transcribe(data: bytes, filename: str, content_type: str) -> tuple[str, str]:
     s = get_settings()
     t0 = time.perf_counter()
     if s.groq_api_key and s.groq_stt_model and not s.offline_mode:

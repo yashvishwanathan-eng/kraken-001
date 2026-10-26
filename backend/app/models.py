@@ -293,3 +293,41 @@ class DutyEvent(Base):
     method: Mapped[str] = mapped_column(String(16))  # pass_scan, post_qr, dashboard, voice
     area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True)
     by_name: Mapped[str] = mapped_column(String(120))  # who recorded it (the guard, or the person scanning)
+
+
+class Conversation(Base):
+    """One talk with Friday (P31): a phone call she made, or a laptop session (wake word, Space, typed).
+
+    Kept apart from the audit log and from Friday's page: the Conversations page shows each one as a chat,
+    with the recorded audio. A laptop session groups the orders one user gives within a few minutes.
+    """
+
+    __tablename__ = "conversations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    channel: Mapped[str] = mapped_column(String(8))  # phone, laptop
+    person: Mapped[str] = mapped_column(String(120))  # who Friday talked with
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    call_id: Mapped[int | None] = mapped_column(ForeignKey("calls.id", ondelete="SET NULL"), nullable=True,
+                                                unique=True)
+    incident_id: Mapped[int | None] = mapped_column(ForeignKey("incidents.id", ondelete="SET NULL"), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    last_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    recording_path: Mapped[str | None] = mapped_column(String(255), nullable=True)  # whole call audio (phone)
+    turns: Mapped[list["ConversationTurn"]] = relationship(
+        back_populates="conversation", order_by="ConversationTurn.id", cascade="all, delete-orphan")
+
+
+class ConversationTurn(Base):
+    """One thing said: by Friday or by the person (text, plus their voice clip for laptop orders)."""
+
+    __tablename__ = "conversation_turns"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[int] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    speaker: Mapped[str] = mapped_column(String(8))  # friday, person
+    text: Mapped[str] = mapped_column(String(1000))
+    action: Mapped[str | None] = mapped_column(String(32), nullable=True)  # what Friday did after it, if anything
+    audio_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    conversation: Mapped[Conversation] = relationship(back_populates="turns")

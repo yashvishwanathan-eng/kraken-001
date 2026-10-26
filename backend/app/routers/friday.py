@@ -25,7 +25,7 @@ from app.models import User
 from app.routers.assistant import SORRY, _log, _push, _read_audio
 from app.routers.internal import require_internal_key
 from app.schemas import ConfirmIn, ConfirmOut, SpeakIn, VoiceCommandOut
-from app.services import commands, tts
+from app.services import commands, conversations, tts
 from app.services.stt import SttUnavailable, transcribe
 from app.ws import manager
 
@@ -99,6 +99,7 @@ async def voice_command(audio: UploadFile = File(...), confirm_token: str | None
     except SttUnavailable as exc:
         raise HTTPException(status_code=503, detail=f"speech to text is not available: {exc}")
     transcript = transcript.strip()
+    clip = await run_in_threadpool(conversations.save_voice, data, (audio.content_type or "").lower())
     on_screen = user.id in manager.online_user_ids()
     spoken_by = "dashboard" if on_screen else "listener"
     if confirm_token:
@@ -107,7 +108,7 @@ async def voice_command(audio: UploadFile = File(...), confirm_token: str | None
         answer = result.answer if result else "That confirmation expired. Nothing was done."
         await run_in_threadpool(_log, user, "assistant_command", "voice", {
             "text": transcript or "(silence)", "intent": result.intent if result else "confirm",
-            "status": result.status if result else "refused", "answer": answer, "via": "wake word"})
+            "status": result.status if result else "refused", "answer": answer, "via": "wake word", "audio": clip})
         if result:
             await _push(result.notices)
         await manager.broadcast(_notice("speaking", transcript, answer, user.id if on_screen else None))
@@ -116,13 +117,15 @@ async def voice_command(audio: UploadFile = File(...), confirm_token: str | None
                                   ms=int((time.perf_counter() - t0) * 1000), data=result.data if result else {},
                                   spoken_by=spoken_by)
     if not transcript:
+        await run_in_threadpool(_log, user, "assistant_command", "voice", {
+            "text": "", "intent": "unknown", "status": "unknown", "answer": SORRY, "via": "wake word", "audio": clip})
         await manager.broadcast(_notice("speaking", "", SORRY, user.id if on_screen else None))
         return ListenerCommandOut(transcript="", intent="unknown", status="unknown", answer=SORRY, confirm_token=None,
                                   ms=int((time.perf_counter() - t0) * 1000), data={}, spoken_by=spoken_by)
     result = await run_in_threadpool(commands.handle, transcript, user)
     await run_in_threadpool(_log, user, "assistant_command", "voice", {
         "text": transcript, "intent": result.intent, "status": result.status, "answer": result.answer,
-        "source": result.data.get("source"), "via": "wake word"})
+        "source": result.data.get("source"), "via": "wake word", "audio": clip})
     await _push(result.notices)
     await manager.broadcast(_notice("speaking", transcript, result.answer, user.id if on_screen else None,
                                     _cameras(result), result.data.get("open_path")))
@@ -152,7 +155,7 @@ async def confirm(body: ConfirmIn) -> ConfirmOut:
 @router.post("/speak", responses={200: {"content": {"audio/wav": {}}}})
 async def speak(body: SpeakIn) -> Response:
     try:
-        audio, _ms = await run_in_threadpool(tts.speak, body.text)
+        audio, _ms = await run_in_threadpool(tts.speak, body.text, body.style)
     except tts.TtsUnavailable as exc:
         raise HTTPException(status_code=503, detail=f"text to speech is not available: {exc}")
     return Response(content=audio, media_type="audio/wav")

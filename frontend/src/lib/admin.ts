@@ -267,3 +267,31 @@ export const getRecordingDay = (cameraId: string, date?: string) =>
 export const getRecordingAt = (cameraId: string, at: string) =>
   http.get<{ camera_id: string; url: string; start: string; end: string; offset_s: number }>(
     `/recordings/at?camera_id=${encodeURIComponent(cameraId)}&at=${encodeURIComponent(at)}`)
+
+/* ── Conversations with Friday (P31) ───────────────────── */
+
+export interface ConversationSummary {
+  id: number
+  channel: 'phone' | 'laptop'
+  person: string
+  incident_id: number | null
+  started_at: string
+  last_at: string
+  turns: number
+  last_text: string
+  recording_url: string | null
+}
+
+export interface ConversationLine {
+  at: string
+  speaker: 'friday' | 'person'
+  text: string
+  action: string | null
+  audio_url: string | null
+}
+
+export const getConversations = (channel?: 'phone' | 'laptop') =>
+  http.get<ConversationSummary[]>(`/conversations${channel ? `?channel=${channel}` : ''}`)
+
+export const getConversation = (id: number) =>
+  http.get<ConversationSummary & { lines: ConversationLine[] }>(`/conversations/${id}`)

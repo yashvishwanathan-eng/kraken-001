@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     rumik_model: str = "mulberry"  # mulberry (takes a voice description) or muga
     rumik_speaker: str = ""  # a preset voice (mulberry); empty = Rumik's default
     rumik_description: str = "warm, clear Indian woman, calm and confident"  # mulberry only: Friday's voice in words
+    # emergencies (alarm on the laptop, alert and roll-call calls): the same woman, but urgent
+    rumik_urgent_description: str = ("Indian woman in an emergency, urgent, tense and worried, speaking fast and "
+                                     "clearly, serious, not cheerful")
     rumik_timeout_s: float = 8.0
     friday_user: str = ""  # the wake-word listener acts as this user (their name), e.g. Anita Rao
     voice_silence_s: float = 1.0  # stop recording after this much quiet once you have started talking
@@ -90,6 +93,7 @@ class Settings(BaseSettings):
     low_repeat_window_min: int = 60
     onscreen_grace_s: float = 5.0  # on the dashboard: this long to react before the phone rings
     call_style: str = "conversation"  # conversation: Friday talks and listens (LLM); menu: the old keypad menu
+    call_record: bool = True  # Twilio records each call; the audio is kept on the laptop with the conversation
     call_voice: str = "rumik"  # rumik: phone calls speak in Friday's Rumik voice (falls back to twilio); twilio
     no_answer_alert_all_s: float = 45.0  # critical/high: nobody acknowledged by then -> alert every guard on shift
     stream_token_ttl_s: int = 3600

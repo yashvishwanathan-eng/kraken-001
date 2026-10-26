@@ -27,16 +27,21 @@ def configured() -> bool:
     return bool(s.rumik_api_key and s.rumik_gateway_url)
 
 
-def speak(text: str) -> tuple[bytes, int]:
-    """(wav bytes, ms). Raises TtsUnavailable."""
+def description_for(style: str) -> str:
+    s = get_settings()
+    return s.rumik_urgent_description if style == "urgent" and s.rumik_urgent_description else s.rumik_description
+
+
+def speak(text: str, style: str = "calm") -> tuple[bytes, int]:
+    """(wav bytes, ms). style "urgent" asks for the emergency voice (mulberry). Raises TtsUnavailable."""
     s = get_settings()
     if not configured():
         raise TtsUnavailable("set RUMIK_API_KEY and RUMIK_GATEWAY_URL in .env")
     body = {"text": text, "model": s.rumik_model}
     if s.rumik_speaker:
         body["speaker"] = s.rumik_speaker
-    if s.rumik_description and s.rumik_model == "mulberry":
-        body["description"] = s.rumik_description  # e.g. a female voice described in words
+    if description_for(style) and s.rumik_model == "mulberry":
+        body["description"] = description_for(style)  # Friday's voice described in words, calm or urgent
     url = f"{s.rumik_gateway_url.rstrip('/')}/v1/tts"
     headers = {"Authorization": f"Bearer {s.rumik_api_key}", "Content-Type": "application/json"}
     t0 = time.perf_counter()

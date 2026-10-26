@@ -20,7 +20,6 @@ import hashlib
 import hmac
 import logging
 import threading
-from datetime import datetime, timezone
 from xml.sax.saxutils import escape, quoteattr
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -29,9 +28,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.config import PRODUCT_NAME, get_settings
 from app.db import SessionLocal
 from app.models import Call, User
-from app.schemas import iso_utc
-from app.services import alerts, call_agent, call_voice, incidents as incident_ops
-from app.services.audit import record
+from app.services import alerts, call_agent, call_voice, conversations, incidents as incident_ops
 from app.services.calls import NOT_REACHED
 from app.services.directory import contacts_for_role
 from app.services.escalation import alert_text, escalation
@@ -95,9 +92,9 @@ def twiml(*verbs: str) -> Response:
                     media_type="application/xml")
 
 
-def say(text: str) -> str:
+def say(text: str, style: str = "calm") -> str:
     """Friday's Rumik voice when it is set up (made once per sentence), else Twilio's own voice."""
-    return call_voice.speech(text)
+    return call_voice.speech(text, style)
 
 
 def say_plain(text: str) -> str:
@@ -307,12 +304,6 @@ def _gather(call_id: int, digits: str, speech: str, step: str) -> Response:
         return twiml(redirect_to_voice(call_id, 1))
 
 
-def reply_notice(call: Call, said: str, connected_to: str | None) -> dict:
-    """Pushed on /ws/events: Friday tells the control room what the person answered."""
-    return {"kind": "call_reply", "call_id": call.id, "from": call.to_name, "text": said,
-            "connected_to": connected_to, "at": iso_utc(datetime.now(timezone.utc))}
-
-
 def _direct_reply(db, call: Call, digits: str, speech: str) -> Response:
     """The person called by "Friday, call Yash" answered: report it, or connect them to the Admin."""
     said = speech.strip()
@@ -324,12 +315,8 @@ def _direct_reply(db, call: Call, digits: str, speech: str) -> Response:
     if wants_admin:
         target = next((c for role in (s.role_admin, s.role_manager) for c in contacts_for_role(db, role)
                        if c.phone != call.to_phone), None)
-    record(db, None, "call_reply", target=f"call:{call.id}", channel="phone", user_name=call.to_name,
-           detail={"said": said or "(pressed 1)", "asked_for_admin": wants_admin,
-                   "connected_to": target.name if target else None})
-    db.commit()
     log.info("call=%d reply from %s: %r admin=%s", call.id, call.to_name, said[:120], wants_admin)
-    _publish(reply_notice(call, said, target.name if target else None))
+    conversations.call_turn(call.id, "person", said or "(pressed 1)")
     if wants_admin and target is not None:
         return twiml(say(f"Connecting you to {target.name}."),
                      f"<Dial callerId={quoteattr(s.twilio_from_number)}>{escape(target.phone)}</Dial>")
@@ -379,22 +366,25 @@ def _open_conversation(db, call: Call) -> Response:
                              f"{call_agent.SITUATION.get(incident.type, incident.type).split(' ', 1)[-1]} was already "
                              f"handled{by}. Thank you."), "<Hangup/>")
     conv = call_agent.start(call, incident)
-    return twiml(listen(call.id, say(conv.history[0]["content"])))
+    opening = conv.history[0]["content"]
+    conversations.call_turn(call.id, "friday", opening)
+    return twiml(listen(call.id, say(opening, call_agent.style_for(conv.kind))))
 
 
 def _answer(call_id: int, turn: call_agent.Turn) -> Response:
     """Speak Friday's turn, then: put the call through, hang up, or listen again."""
     conv = call_agent.get(call_id)
+    style = call_agent.style_for(conv.kind) if conv is not None else "calm"
     if conv is not None:
         call_agent.remember_reply(conv, turn.reply)
     if turn.dial_phone:
         call_agent.finish(call_id)
-        return twiml(say(turn.reply),
+        return twiml(say(turn.reply, style),
                      f"<Dial callerId={quoteattr(get_settings().twilio_from_number)}>{escape(turn.dial_phone)}</Dial>")
     if turn.end or turn.action == "end":
         call_agent.finish(call_id)
-        return twiml(say(turn.reply), "<Hangup/>")
-    return twiml(listen(call_id, say(turn.reply)))
+        return twiml(say(turn.reply, style), "<Hangup/>")
+    return twiml(listen(call_id, say(turn.reply, style)))
 
 
 def _connect(db, call: Call, role: str, conv: call_agent.Conversation) -> call_agent.Turn:
@@ -451,8 +441,7 @@ def _carry_out(call_id: int, conv: call_agent.Conversation, turn: call_agent.Tur
                     db.commit()
                     _publish(incident_ops.to_message(incident))
                     escalation.stop(incident.id, except_call_id=call_id)
-                    turn = call_agent.Turn(f"Thank you, {first}. I've told everyone you're on your way. "
-                                           "Please be careful.", end=True)
+                    turn = call_agent.Turn(call_agent.ack_reply(first), end=True)
                 else:
                     by = incident.acknowledged_by or "someone else"
                     turn = call_agent.Turn(f"{by} is already on it. Please stay close in case they need help.",
@@ -488,12 +477,6 @@ def _carry_out(call_id: int, conv: call_agent.Conversation, turn: call_agent.Tur
             turn = call_agent.Turn("Great, thank you. I'll tell the control room you're coming.", end=True)
         elif turn.action == "end" and not turn.reply:
             turn = call_agent.Turn("Okay. Thank you, goodbye.", end=True)
-        if said:  # every sentence they say is reported to the control room
-            with SessionLocal() as audit_db:
-                record(audit_db, None, "call_reply", target=f"call:{call_id}", channel="phone", user_name=name,
-                       detail={"said": said, "friday": turn.reply, "action": turn.action})
-                audit_db.commit()
-            _publish(reply_notice(Call(id=call_id, to_name=name), said, turn.dial_name))
     return turn
 
 
@@ -502,9 +485,12 @@ def _think(call_id: int, said: str, digits: str) -> None:
     if conv is None:
         return
     try:
+        conversations.call_turn(call_id, "person", said or f"(pressed {digits[:1]})")
         turn = call_agent.decide(conv, said, digits)
         turn = _carry_out(call_id, conv, turn, said, "keypad" if digits else "voice")
-        call_voice.audio_link(turn.reply)  # make her answer in the Rumik voice now, while the filler plays
+        call_voice.audio_link(turn.reply, call_agent.style_for(conv.kind))  # made now, while the filler plays
+        conversations.call_turn(call_id, "friday", turn.reply,
+                                None if turn.action in ("none", "connect") else turn.action)
     except Exception:
         log.exception("call=%d could not answer", call_id)
         turn = call_agent.Turn("Sorry, I lost that. I'll let the control room know. Goodbye.", end=True)
@@ -536,8 +522,9 @@ async def talk(request: Request, call_id: int) -> Response:
     if await run_in_threadpool(conv.ready.wait, TALK_WAIT_S):
         return await run_in_threadpool(_answer, call_id, conv.pending)
     filler = call_agent.FILLERS[conv.turns % len(call_agent.FILLERS)]
+    style = call_agent.style_for(conv.kind)
     nxt = escape(url(f"/twilio/next?call_id={call_id}"))
-    return twiml(await run_in_threadpool(say, filler), f'<Redirect method="POST">{nxt}</Redirect>')
+    return twiml(await run_in_threadpool(say, filler, style), f'<Redirect method="POST">{nxt}</Redirect>')
 
 
 @router.post("/next")
@@ -560,7 +547,18 @@ async def silence(request: Request, call_id: int) -> Response:
     conv = call_agent.get(call_id) or await run_in_threadpool(_restart_conversation, call_id)
     if conv is None:
         return twiml("<Hangup/>")
-    return await run_in_threadpool(_answer, call_id, call_agent.silence_reply(conv))
+    turn = call_agent.silence_reply(conv)
+    await run_in_threadpool(conversations.call_turn, call_id, "friday", turn.reply)
+    return await run_in_threadpool(_answer, call_id, turn)
+
+
+@router.post("/recording")
+async def recording(request: Request, call_id: int) -> Response:
+    """Twilio finished recording the call: keep the audio on the laptop with the conversation."""
+    form = await verified_form(request)
+    if form.get("RecordingStatus", "completed") == "completed" and form.get("RecordingUrl"):
+        conversations.save_call_recording(call_id, form["RecordingUrl"])
+    return twiml()
 
 
 def _status(call_id: int, status: str, call_sid: str) -> None:

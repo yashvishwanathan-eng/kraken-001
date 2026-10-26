@@ -18,7 +18,7 @@ from app.schemas import (
     AssistantAnswer, AssistantQueryIn, AssistantVoiceAnswer, CommandIn, CommandOut, ConfirmIn, ConfirmOut, IncidentOut,
     SpeakIn, VoiceCommandOut,
 )
-from app.services import commands, tts
+from app.services import commands, conversations, tts
 from app.services.assistant import ask
 from app.services.audit import record
 from app.services.stt import SttUnavailable, transcribe
@@ -30,10 +30,16 @@ AUDIO_PREFIXES = ("audio/", "video/webm")  # browsers record push-to-talk as aud
 
 
 def _log(user: User, action: str, channel: str, detail: dict) -> None:
+    """Audit row, plus the turn in the Conversations history (P31): what was said (and the voice clip, when
+    detail has "audio") and Friday's answer."""
     with SessionLocal() as db:
         record(db, user, action, channel=channel, detail={k: (v[:1000] if isinstance(v, str) else v)
                                                           for k, v in detail.items()})
         db.commit()
+    if "answer" in detail:
+        conversations.laptop_turn(user, detail.get("text", ""), detail["answer"], detail.get("intent"),
+                                  detail.get("audio"),
+                                  detail.get("via") or ("voice" if detail.get("audio") else "typed"))
 
 
 def _ask(question: str, user: User, channel: str = "dashboard") -> AssistantAnswer:
@@ -102,7 +108,7 @@ async def confirm(body: ConfirmIn, user: User = Depends(require("assistant"))) -
                       ms=int((time.perf_counter() - t0) * 1000), data=result.data)
 
 
-SORRY = "Sorry, say that again."
+SORRY = "Sorry, I didn't catch that."
 
 
 async def _read_audio(audio: UploadFile) -> bytes:
@@ -120,7 +126,7 @@ async def _read_audio(audio: UploadFile) -> bytes:
 @router.post("/voice-command", response_model=VoiceCommandOut)
 async def voice_command(audio: UploadFile = File(...), user: User = Depends(require("assistant"))) -> VoiceCommandOut:
     """Friday by voice: what you said becomes a command (summaries, show cameras, call a zone, ...).
-    Silence or noise gives "Sorry, say that again." (200), so the screen can simply say it."""
+    Silence or noise gives "Sorry, I didn't catch that." (200), so the screen can simply say it."""
     t0 = time.perf_counter()
     data = await _read_audio(audio)
     try:
@@ -129,13 +135,16 @@ async def voice_command(audio: UploadFile = File(...), user: User = Depends(requ
     except SttUnavailable as exc:
         raise HTTPException(status_code=503, detail=f"speech to text is not available: {exc}")
     transcript = transcript.strip()
+    clip = await run_in_threadpool(conversations.save_voice, data, (audio.content_type or "").lower())
     if not transcript:
+        await run_in_threadpool(_log, user, "assistant_command", "voice", {
+            "text": "", "intent": "unknown", "status": "unknown", "answer": SORRY, "audio": clip})
         return VoiceCommandOut(transcript="", intent="unknown", status="unknown", answer=SORRY, confirm_token=None,
                                ms=int((time.perf_counter() - t0) * 1000), data={})
     result = await run_in_threadpool(commands.handle, transcript, user)
     await run_in_threadpool(_log, user, "assistant_command", "voice", {
         "text": transcript, "intent": result.intent, "status": result.status, "answer": result.answer,
-        "source": result.data.get("source")})
+        "source": result.data.get("source"), "audio": clip})
     await _push(result.notices)
     return VoiceCommandOut(transcript=transcript, intent=result.intent, status=result.status, answer=result.answer,
                            confirm_token=result.confirm_token, ms=int((time.perf_counter() - t0) * 1000),
@@ -147,7 +156,7 @@ async def speak(body: SpeakIn, _: User = Depends(require("assistant"))) -> Respo
     """The answer read aloud in the Rumik Silk voice. 503 if Rumik is not set up or does not answer;
     the dashboard can then use the browser's own speech."""
     try:
-        audio, _ms = await run_in_threadpool(tts.speak, body.text)
+        audio, _ms = await run_in_threadpool(tts.speak, body.text, body.style)
     except tts.TtsUnavailable as exc:
         raise HTTPException(status_code=503, detail=f"text to speech is not available: {exc}")
     return Response(content=audio, media_type="audio/wav")

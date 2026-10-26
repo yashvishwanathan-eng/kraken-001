@@ -27,7 +27,7 @@ def test_voice_command_runs_what_was_said(roster, monkeypatch):
 def test_voice_command_with_no_speech_says_sorry(roster, monkeypatch):
     monkeypatch.setattr(assistant_router, "transcribe", lambda data, name, ctype: ("", "groq"))
     body = client.post("/assistant/voice-command", files=AUDIO, headers=login(client, "1111")).json()
-    assert (body["status"], body["answer"]) == ("unknown", "Sorry, say that again.")
+    assert (body["status"], body["answer"]) == ("unknown", "Sorry, I didn't catch that.")
 
 
 def test_voice_command_rejects_non_audio(roster):

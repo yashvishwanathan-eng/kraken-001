@@ -17,6 +17,7 @@ import { CamerasPage }        from '@/pages/Cameras'
 import { DutyPage }           from '@/pages/Duty'
 import { LogsPage }           from '@/pages/Logs'
 import { RecordingsPage }     from '@/pages/Recordings'
+import { ConversationsPage }  from '@/pages/Conversations'
 import { useAuth }            from '@/lib/auth'
 
 function ProtectedLayout() {
@@ -38,6 +39,7 @@ export function Router() {
         <Route path="/incidents"       element={<IncidentsPage />} />
         <Route path="/incidents/:id"   element={<IncidentDetailPage />} />
         <Route path="/recordings"      element={<RecordingsPage />} />
+        <Route path="/conversations"   element={<ConversationsPage />} />
         <Route path="/assistant"       element={<AssistantPage />} />
         <Route path="/people"          element={<PeoplePage />} />
         <Route path="/duty"            element={<DutyPage />} />

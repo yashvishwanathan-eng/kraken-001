@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.config import get_settings
 from app.main import app
-from app.models import AuditLog, Call, Incident, Responder, RollCall
+from app.models import Call, Conversation, Incident, Responder, RollCall
 from app.routers import twilio as twilio_router
 from app.services import call_agent, tts
 from tests.conftest import make_incident, twilio_post
@@ -21,6 +21,12 @@ def talk(twilio_on, monkeypatch):
     monkeypatch.setattr(call_agent, "_llm_turn", lambda conv: None)  # keyword fallback unless a test sets an LLM
     yield sent
     call_agent._calls.clear()
+
+
+def lines(db, call_id):
+    db.expire_all()
+    conv = db.query(Conversation).filter_by(call_id=call_id).one()
+    return [(t.speaker, t.text) for t in conv.turns]
 
 
 def a_call(db, kind="alert", incident_id=None, name="Ravi Kumar", message=None):
@@ -42,8 +48,8 @@ def say_(call_id, words="", digits=""):
 def test_the_call_opens_like_a_person_and_listens(roster, talk):
     call_id = a_call(roster, incident_id=make_incident(roster, type_="fire", severity="critical"))
     opening = twilio_post(client, f"/twilio/voice?call_id={call_id}", {}).text
-    assert "Hi Ravi, this is Friday" in opening and "There&apos;s a fire" in opening.replace("'", "&apos;")
-    assert "Where are you right now?" in opening and "Press" not in opening and "alert." not in opening
+    assert "Ravi, it&apos;s Friday from RingGuard" in opening.replace("'", "&apos;")
+    assert "right now! Where are you?" in opening and "Press" not in opening and "alert." not in opening
     assert "/twilio/talk?call_id=" in opening and "/twilio/silence?call_id=" in opening
 
 
@@ -54,12 +60,15 @@ def test_she_answers_what_they_say_and_reports_it(roster, talk, monkeypatch):
                         lambda conv: call_agent.Turn("Okay. Can you get to the shop floor in two minutes?", "none"))
     reply = say_(call_id, "I'm in the canteen")
     assert "Can you get to the shop floor" in reply and "<Gather" in reply  # she keeps listening
-    assert talk[-1]["kind"] == "call_reply" and talk[-1]["text"] == "I'm in the canteen"
+    assert not [m for m in talk if m.get("kind") == "call_reply"]  # nothing goes to Friday's page any more
     assert call_agent.get(call_id).history[-2:] == [
         {"role": "user", "content": "I'm in the canteen"},
         {"role": "assistant", "content": "Okay. Can you get to the shop floor in two minutes?"}]
-    roster.expire_all()
-    assert roster.query(AuditLog).filter_by(action="call_reply").count() == 1
+    assert lines(roster, call_id) == [
+        ("friday", "Ravi, it's Friday from RingGuard. There's a fire at Laptop Webcam, near the server room door, "
+                   "right now! Where are you?"),
+        ("person", "I'm in the canteen"),
+        ("friday", "Okay. Can you get to the shop floor in two minutes?")]
 
 
 def test_going_acknowledges_and_ends_the_call(roster, talk):
@@ -67,7 +76,7 @@ def test_going_acknowledges_and_ends_the_call(roster, talk):
     call_id = a_call(roster, incident_id=incident_id)
     twilio_post(client, f"/twilio/voice?call_id={call_id}", {})
     reply = say_(call_id, "okay I'm going there now")
-    assert "on your way" in reply and "<Hangup/>" in reply
+    assert "on the way" in reply and "<Hangup/>" in reply
     roster.expire_all()
     incident = roster.get(Incident, incident_id)
     assert incident.status == "acknowledged" and incident.acknowledged_by == "Ravi Kumar"
@@ -79,7 +88,7 @@ def test_asking_for_the_admin_puts_the_call_through(roster, talk):
     reply = say_(call_id, "can you connect me to the admin")
     admin = roster.query(Responder).filter_by(name="Anita Rao").one()
     assert "<Dial" in reply and admin.phone in reply and "connecting you to Anita Rao" in reply
-    assert talk[-1]["connected_to"] == "Anita Rao"
+    assert lines(roster, call_id)[-1] == ("friday", "Okay, connecting you to Anita Rao now.")
 
 
 def test_a_critical_fire_cannot_be_closed_from_the_phone(roster, talk, monkeypatch):
@@ -138,14 +147,14 @@ def test_a_direct_call_reports_the_reply(roster, talk):
     opening = twilio_post(client, f"/twilio/voice?call_id={call_id}", {}).text
     assert "Yash in the control room needs you." in opening and "connect you to the admin" in opening
     reply = say_(call_id, "I am at gate two")
-    assert "pass that on" in reply and talk[-1]["text"] == "I am at gate two"
+    assert "pass that on" in reply and ("person", "I am at gate two") in lines(roster, call_id)
 
 
 def test_calls_speak_in_the_rumik_voice_made_once(roster, talk, monkeypatch, tmp_path):
     made = []
 
-    def speak(text):
-        made.append(text)
+    def speak(text, style="calm"):
+        made.append((text, style))
         return b"RIFF-wav", 800
 
     s = get_settings()
@@ -158,7 +167,7 @@ def test_calls_speak_in_the_rumik_voice_made_once(roster, talk, monkeypatch, tmp
     assert "<Play>" in first and "<Say" not in first and "/share/media/tts_" in first
     call_agent._calls.clear()
     twilio_post(client, f"/twilio/voice?call_id={call_id}", {})
-    assert len(made) == 1  # the same sentence is made once and reused
+    assert len(made) == 1 and made[0][1] == "urgent"  # made once, reused; a fire call sounds urgent
 
 
 def test_without_an_llm_she_never_says_the_same_thing_twice_in_a_row(roster, talk):
@@ -167,3 +176,43 @@ def test_without_an_llm_she_never_says_the_same_thing_twice_in_a_row(roster, tal
     replies = [say_(call_id, words) for words in ("hmm", "what", "where is it", "tell me more")]
     spoken = [r.split("<Say", 1)[1].split(">", 1)[1].split("</Say>", 1)[0] for r in replies]
     assert all(a != b for a, b in zip(spoken, spoken[1:]))
+
+
+def test_im_heading_there_is_handled_at_once_without_the_llm(roster, talk, monkeypatch):
+    incident_id = make_incident(roster, type_="fire", severity="critical")
+    call_id = a_call(roster, incident_id=incident_id)
+    twilio_post(client, f"/twilio/voice?call_id={call_id}", {})
+    monkeypatch.setattr(call_agent, "_llm_turn", lambda conv: pytest.fail("no LLM for 'I'm heading there'"))
+    reply = say_(call_id, "yes I'm heading right there")
+    assert "Go, Ravi!" in reply and "<Hangup/>" in reply
+    roster.expire_all()
+    assert roster.get(Incident, incident_id).status == "acknowledged"
+
+
+def test_not_going_is_not_taken_as_going(roster, talk):
+    call_id = a_call(roster, incident_id=make_incident(roster, type_="fire", severity="critical"))
+    twilio_post(client, f"/twilio/voice?call_id={call_id}", {})
+    assert "Go, Ravi!" not in say_(call_id, "I can't go there right now")
+
+
+def test_the_call_recording_is_kept_with_the_conversation(roster, talk, monkeypatch, tmp_path):
+    from app.services import conversations
+
+    monkeypatch.setattr(get_settings(), "media_dir", str(tmp_path))
+
+    class Reply:
+        content = b"ID3-mp3"
+
+        def raise_for_status(self):
+            pass
+
+    monkeypatch.setattr(conversations.httpx, "get", lambda url, **kw: Reply() if url.endswith(".mp3") else None)
+    monkeypatch.setattr(conversations, "save_call_recording", lambda cid, url: conversations._download(cid, url))
+    call_id = a_call(roster, incident_id=make_incident(roster))
+    twilio_post(client, f"/twilio/voice?call_id={call_id}", {})
+    twilio_post(client, f"/twilio/recording?call_id={call_id}",
+                {"RecordingStatus": "completed", "RecordingUrl": "https://api.twilio.com/rec/RE1"})
+    roster.expire_all()
+    conv = roster.query(Conversation).filter_by(call_id=call_id).one()
+    assert conv.recording_path == f"calls/call_{call_id}.mp3"
+    assert (tmp_path / "calls" / f"call_{call_id}.mp3").read_bytes() == b"ID3-mp3"

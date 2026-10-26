@@ -98,6 +98,8 @@ class TwilioClient:
             "StatusCallbackMethod": "POST",
             "StatusCallbackEvent": ["initiated", "ringing", "answered", "completed"],
             "Timeout": str(self.settings.call_ring_timeout_s),
+            **({"Record": "true", "RecordingStatusCallback": f"{base}/twilio/recording?call_id={call_id}",
+                "RecordingStatusCallbackMethod": "POST"} if self.settings.call_record else {}),
         })
         return result["sid"]
 
@@ -235,14 +237,17 @@ class CallService:
         with SessionLocal() as db:
             call = db.get(Call, call_id)
             incident = incident_ops.load(db, call.incident_id) if call.incident_id else None
+            style = call_agent.style_for(call.kind)
             if self.settings.call_style == "conversation" and call.kind in ("alert", "roll_call", "direct"):
-                texts = [call_agent.opening(call, incident), *call_agent.FILLERS]
+                # the opening, the "one second" fillers and "Go, Ravi! ..." (so "I'm going" is answered at once)
+                texts = [call_agent.opening(call, incident), *call_agent.FILLERS,
+                         call_agent.ack_reply(call_agent.first_name(call.to_name))]
             else:
                 texts = [alert_text(incident, self.settings.timezone) if incident and call.kind == "alert"
                          else call.message]
         for text in texts:
             if text:
-                call_voice.prepare(text)
+                call_voice.prepare(text, style)
 
     def _speak_only(self, call_id: int) -> str:
         """The call still tells the problem (twice) when PUBLIC_BASE_URL is missing or wrong."""

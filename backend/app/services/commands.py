@@ -140,8 +140,7 @@ def handle(text: str, user: User) -> CommandResult:
     intent, args, path = detect(text)
     log.info("step=command intent=%s path=%s user=%s", intent, path, user.name)
     if intent == "unknown":
-        return CommandResult("unknown", "unknown", "Sorry, I didn't catch that. Try 'status report' or "
-                                                   "'what happened in the last hour'.")
+        return CommandResult("unknown", "unknown", "Sorry, I didn't catch that.")
     needed = NEEDS.get(intent)
     if needed and not can(user, needed):
         return CommandResult(intent, "refused", "Your role is not allowed to do that.")
