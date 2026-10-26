@@ -71,3 +71,7 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - framer-motion (MIT), lucide-react (ISC), TanStack Query (MIT), React (MIT), Tailwind CSS (MIT): already used by the frontend.
 - three.js 0.186.1 (MIT): draws Friday's blob (WebGL). @types/three 0.186.0 (MIT) for TypeScript.
 - Friday's blob is adapted from an "anomalous matter" Three.js hero component pasted by Kirito (source and licence to confirm); its noise is the 3D simplex noise by Ashima Arts / Stefan Gustavson (MIT).
+
+## Wake word "Hey Friday" (guide ready, 26 Oct; training runs on Kirito's Colab)
+- openWakeWord (Apache-2.0 code): wake-word detection on the laptop. The ready-made "Hey Jarvis" stand-in model is CC BY-NC-SA 4.0 (non-commercial).
+- Google Colab (free T4 GPU) runs openWakeWord's `automatic_model_training.ipynb` to train `hey_friday.onnx` (guide: `backend/tools/wake_training/README.md`). Training data: synthetic "hey friday" clips from piper-sample-generator (LibriTTS-R voice model) mixed with AudioSet, Free Music Archive and ACAV100M background audio/features; their own licences apply. No recordings of real people are used.

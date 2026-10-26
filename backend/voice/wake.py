@@ -75,6 +75,21 @@ def ensure_model(model_name: str) -> None:
         utils.download_models(model_names=[model_name])
 
 
+def resolve_model(model: str) -> str:
+    """WAKE_MODEL is either a ready-made openWakeWord name (hey_jarvis_v0.1: downloaded once) or the path of a
+    model you trained (models/hey_friday.onnx, relative to backend/). Returns what openWakeWord should load."""
+    if not model.endswith((".onnx", ".tflite")):
+        ensure_model(model)
+        return model
+    path = Path(model)
+    if not path.is_absolute():
+        path = BACKEND_DIR / path
+    if not path.exists():
+        raise FileNotFoundError(f"wake-word model not found: {path}. Put the hey_friday.onnx from Colab there, "
+                                "or set WAKE_MODEL=hey_jarvis_v0.1 until it is trained")
+    return str(path)
+
+
 class WakeListener:
     def __init__(self, *, threshold: float | None = None, device: int | str | None = None,
                  ack_sound: Path | None = None) -> None:
@@ -97,8 +112,7 @@ class WakeListener:
         import sounddevice as sd
         from openwakeword.model import Model
 
-        ensure_model(self.model_name)
-        model = Model(wakeword_models=[self.model_name], inference_framework="onnx")
+        model = Model(wakeword_models=[resolve_model(self.model_name)], inference_framework="onnx")
         chunks: "queue.Queue[np.ndarray]" = queue.Queue()
 
         def microphone(indata, frames, time_info, status) -> None:  # called by the audio driver, ~every 80 ms

@@ -83,3 +83,28 @@ def test_a_number_means_a_device_index_not_a_name():
     assert device_choice("Microphone Array") == "Microphone Array"
     assert device_choice("") is None
     assert device_choice(None) is None
+
+
+def test_a_trained_model_file_is_used_as_is_and_never_downloaded(tmp_path, monkeypatch):
+    from voice import wake
+
+    model = tmp_path / "hey_friday.onnx"
+    model.write_bytes(b"onnx")
+    monkeypatch.setattr(wake, "ensure_model", lambda name: pytest.fail("must not download"))
+    assert wake.resolve_model(str(model)) == str(model)
+
+
+def test_a_missing_trained_model_says_where_it_looked(tmp_path):
+    from voice import wake
+
+    with pytest.raises(FileNotFoundError, match="hey_friday.onnx"):
+        wake.resolve_model("models/hey_friday.onnx")
+
+
+def test_a_relative_model_path_is_inside_backend(monkeypatch, tmp_path):
+    from voice import wake
+
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "hey_friday.onnx").write_bytes(b"onnx")
+    monkeypatch.setattr(wake, "BACKEND_DIR", tmp_path)
+    assert wake.resolve_model("models/hey_friday.onnx") == str(tmp_path / "models" / "hey_friday.onnx")
