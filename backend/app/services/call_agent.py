@@ -72,6 +72,18 @@ WORDS = [  # fallback when no LLM answers; first match wins
     ("ack", ("going", "coming", "on my way", "i'll go", "i will go", "on it", "handling", "yes", "okay", "ok")),
 ]
 FILLERS = ("Okay, one second.", "Got it. One moment.", "Alright, give me a second.")
+# without an LLM: never the same sentence twice in a row
+FALLBACK_ALERT = (
+    "Okay. Can you get there now?",
+    "Understood. Should I connect you to the admin instead?",
+    "Got it. If you're going, just say I'm going. Or say admin, and I'll put you through.",
+    "Alright. Is anyone near you who can check it?",
+)
+FALLBACK_DIRECT = (
+    "Got it, I'll pass that on to the control room. Anything else?",
+    "Okay, noted. Do you want me to connect you to the admin?",
+    "Thanks, the control room will hear that. Is there anything else?",
+)
 
 
 @dataclass
@@ -203,10 +215,9 @@ def _keyword_turn(conv: Conversation, said: str) -> Turn:
         action = "coming"
     if action == "ack" and conv.kind == "roll_call":
         action = "responding"
-    if action == "none" and conv.kind == "direct":
-        return Turn("Got it, I'll pass that on to the control room. Anything else?", "none")
     if action == "none":
-        return Turn("Okay. Can you get there now, or should I connect you to the admin?", "none")
+        options = FALLBACK_DIRECT if conv.kind == "direct" else FALLBACK_ALERT
+        return Turn(options[(conv.turns - 1) % len(options)], "none")
     return Turn("", action)  # the action's own sentence is filled in when it is carried out
 
 

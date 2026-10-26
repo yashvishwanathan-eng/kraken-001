@@ -103,6 +103,20 @@ def main() -> int:
         except httpx.HTTPError as exc:
             line(BAD, f"PUBLIC_BASE_URL not reachable ({exc.__class__.__name__}): start ngrok http 8000")
 
+    print(f"CALL_STYLE={s.call_style}  CALL_VOICE={s.call_voice}")
+    if s.call_style == "conversation":
+        if not (s.groq_api_key and s.groq_model):
+            line(WARN, "GROQ_API_KEY or GROQ_MODEL missing: Friday can only use fixed sentences on calls")
+        else:
+            try:
+                from app.services.llm import LlmUnavailable, chat_json
+
+                value, source = chat_json([{"role": "user", "content": 'Reply with JSON {"ok": true}'}])
+                line(OK, f"Groq answers ({s.groq_model}): Friday can talk freely on calls")
+            except LlmUnavailable as exc:
+                line(BAD, f"Groq did not answer ({exc}): check GROQ_API_KEY and GROQ_MODEL "
+                          "(e.g. llama-3.3-70b-versatile). Until then calls use fixed sentences.")
+
     if args.call:
         person = next((p for p in people if p.name.lower() == args.call.lower()), None)
         if person is None:

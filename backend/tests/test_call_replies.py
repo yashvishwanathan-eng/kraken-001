@@ -159,3 +159,11 @@ def test_calls_speak_in_the_rumik_voice_made_once(roster, talk, monkeypatch, tmp
     call_agent._calls.clear()
     twilio_post(client, f"/twilio/voice?call_id={call_id}", {})
     assert len(made) == 1  # the same sentence is made once and reused
+
+
+def test_without_an_llm_she_never_says_the_same_thing_twice_in_a_row(roster, talk):
+    call_id = a_call(roster, incident_id=make_incident(roster, type_="fire", severity="critical"))
+    twilio_post(client, f"/twilio/voice?call_id={call_id}", {})
+    replies = [say_(call_id, words) for words in ("hmm", "what", "where is it", "tell me more")]
+    spoken = [r.split("<Say", 1)[1].split(">", 1)[1].split("</Say>", 1)[0] for r in replies]
+    assert all(a != b for a, b in zip(spoken, spoken[1:]))
