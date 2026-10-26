@@ -46,13 +46,14 @@ def _write_wav(path: Path, rate: int, channels: int, width: int, samples: int = 
     return path
 
 
-def test_ack_sound_must_be_16k_mono_16bit(tmp_path):
+def test_ack_sound_is_converted_to_16k_mono(tmp_path):
     good = _write_wav(tmp_path / "good.wav", SAMPLE_RATE, 1, 2)
     assert len(read_wav_samples(good)) == 1600
+    # Rumik sends 24 kHz: same 0.1 s, resampled to 16 kHz
+    assert len(read_wav_samples(_write_wav(tmp_path / "rate.wav", 24000, 1, 2, samples=2400))) == 1600
+    assert len(read_wav_samples(_write_wav(tmp_path / "stereo.wav", SAMPLE_RATE, 2, 2))) == 1600
     with pytest.raises(ValueError):
-        read_wav_samples(_write_wav(tmp_path / "rate.wav", 24000, 1, 2))
-    with pytest.raises(ValueError):
-        read_wav_samples(_write_wav(tmp_path / "stereo.wav", SAMPLE_RATE, 2, 2))
+        read_wav_samples(_write_wav(tmp_path / "8bit.wav", SAMPLE_RATE, 1, 1))
 
 
 def test_missing_ack_sound_still_builds_the_listener(tmp_path):

@@ -56,12 +56,21 @@ def best_score(scores: dict[str, float]) -> float:
 
 
 def read_wav_samples(path: Path) -> "list[int]":
-    """Read a 16 kHz mono 16-bit WAV (the ack sound) as a list of samples. Standard library only."""
+    """Read a 16-bit WAV (the ack sound) as 16 kHz mono samples. Other rates (Rumik sends 24 kHz) and stereo
+    are converted, so a file saved by tools.check_rumik --save works as is."""
+    import numpy as np
+
     with wave.open(str(path), "rb") as wav:
-        if wav.getframerate() != SAMPLE_RATE or wav.getnchannels() != 1 or wav.getsampwidth() != 2:
-            raise ValueError(f"{path} must be 16 kHz, mono, 16-bit (run the ffmpeg conversion)")
-        import array
-        return array.array("h", wav.readframes(wav.getnframes())).tolist()
+        if wav.getsampwidth() != 2:
+            raise ValueError(f"{path} must be 16-bit PCM")
+        rate, channels = wav.getframerate(), wav.getnchannels()
+        samples = np.frombuffer(wav.readframes(wav.getnframes()), dtype=np.int16).astype(np.float64)
+    if channels > 1:
+        samples = samples.reshape(-1, channels).mean(axis=1)
+    if rate != SAMPLE_RATE and len(samples):
+        n = int(round(len(samples) * SAMPLE_RATE / rate))
+        samples = np.interp(np.linspace(0, len(samples) - 1, n), np.arange(len(samples)), samples)
+    return np.clip(np.round(samples), -32768, 32767).astype(np.int16).tolist()
 
 
 def ensure_model(model_name: str) -> None:
