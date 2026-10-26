@@ -98,8 +98,12 @@ Check the class names: open `D-Fire-1/data.yaml` in Colab; the `names:` line sho
    ```
 3. Download `runs/detect/helmet/weights/best.pt` as **`rider_helmet.pt`**.
 4. Open its `data.yaml`: the class for a bare head must be one of `without helmet`, `no helmet`, `no_helmet`,
-   `nohelmet` (any case), or put its real name in `NO_HELMET_LABELS`.
-5. Best results: add 100 or so photos from YOUR gate camera (Part 3b's steps, classes `with helmet` /
+   `nohelmet` (any case), or put its real name in `NO_HELMET_LABELS`. We used "Helmet & No helmet detection"
+   (classes `1-2-helmet`, `3-4-helmet`, `Full-face-helmet`, `Bald`, `Cap`, `Face and Hair`), so:
+   `NO_HELMET_LABELS=bald,cap,face and hair,no helmet,without helmet`.
+5. A bare head counts as "no helmet" even for someone walking, so run this model only on gate cameras:
+   `HELMET_CAMERAS=cam-gate` (comma list of camera ids; empty = every camera).
+6. Best results: add 100 or so photos from YOUR gate camera (Part 3b's steps, classes `with helmet` /
    `without helmet`).
 
 ## Part 4: use them on the laptop (10 minutes)
@@ -121,6 +125,8 @@ Check the class names: open `D-Fire-1/data.yaml` in Colab; the `names:` line sho
    SMOKE_LABELS=smoke
    FIRE_CONF=0.35
    HELMET_MODEL_PATH=models/rider_helmet.pt
+   HELMET_CAMERAS=cam-gate
+   NO_HELMET_LABELS=bald,cap,face and hair,no helmet,without helmet
    ```
    **Gate guards:** the guard who is called for a rider without a helmet is the Guard who has that gate camera
    (People and roles → their cameras). Main gate camera → main gate guard, second gate → second gate guard, and

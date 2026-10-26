@@ -42,6 +42,12 @@ ZONE_COLOURS = {"restricted": (0, 0, 255), "ppe": (0, 165, 255), "work": (0, 255
 log = logging.getLogger("safetyai.worker")
 
 
+def helmet_camera(camera_id: str, cameras_csv: str) -> bool:
+    """Does this camera run the rider-helmet model? Empty list = every camera."""
+    wanted = {c.strip() for c in cameras_csv.split(",") if c.strip()}
+    return not wanted or camera_id in wanted
+
+
 def load_zones(camera_id: str) -> list[ZoneDef] | None:
     """Zones for this camera from the database (with the names allowed into restricted ones). None if the database
     is unreachable."""
@@ -149,8 +155,9 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     # flames are kept from FIRE_CONF up (a lighter's flame scores lower); the rule still needs FIRE_FRAMES in a row
     fire_detector = optional_detector(settings.fire_model_path, settings.detect_imgsz,
                                       min(settings.detect_conf, settings.fire_conf), "fire")
-    helmet_detector = optional_detector(settings.helmet_model_path, settings.detect_imgsz, settings.detect_conf,
-                                        "rider helmet")
+    # a bare head counts as "no helmet", so the helmet model runs only on the gate cameras listed in HELMET_CAMERAS
+    helmet_detector = (optional_detector(settings.helmet_model_path, settings.detect_imgsz, settings.detect_conf,
+                                         "rider helmet") if helmet_camera(camera.id, settings.helmet_cameras) else None)
     for extra in (ppe_detector, fire_detector, helmet_detector):
         if extra is not None:
             extra.warm_up()

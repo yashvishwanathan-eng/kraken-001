@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     face_match: float = 0.40  # SFace cosine similarity at or above which a face is that person (0.36 to 0.45)
     face_max_photos: int = 10  # photos per enrollment upload
     helmet_model_path: str = ""  # two-wheeler riders with/without helmet (.pt); empty = rule off (gate cameras)
+    helmet_cameras: str = ""  # camera ids that run the helmet model, e.g. cam-gate; empty = every camera
     rumik_api_key: str = ""  # secret: Rumik Silk text to speech (the assistant's spoken replies)
     rumik_gateway_url: str = ""  # the gateway address shown in the Rumik dashboard (playground.rumik.ai)
     rumik_model: str = "mulberry"  # mulberry (takes a voice description) or muga
