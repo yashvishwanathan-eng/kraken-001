@@ -37,6 +37,14 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - tzdata (Apache-2.0): time zone data so IST works on Windows.
 - pytest (MIT): tests.
 
+## Wake word and voice (in use, Step 1)
+- openWakeWord 0.6.0 (Apache-2.0): listens to the microphone and detects the wake word, offline on the laptop.
+- Pretrained model `hey_jarvis_v0.1` (from the openWakeWord project): used for testing only, until the custom wake word is trained. Its own licence terms must be checked before the event, because they are separate from the library's.
+- onnxruntime 1.31.0 (MIT): runs the wake-word model.
+- sounddevice 0.5.6 (MIT): reads the microphone and plays the acknowledgement sound. Needs PortAudio, which the package installs on Windows.
+- numpy 2.4.6 (BSD-3-Clause): audio arrays.
+- The acknowledgement sound `media/ack/yes_boss.wav` was made from a voice recording generated outside this project (see the owner). Its source must be named here before any public use.
+
 ## Email and QR codes (in use, P19)
 - qrcode 8.2 (BSD licence): draws the invitation QR code as a PNG on the laptop.
 - SMTP email (the provider is chosen by Kirito: a Gmail app password, Outlook, or a school mail server): sends the invitation link. Only the invitee's address and the link leave the laptop.

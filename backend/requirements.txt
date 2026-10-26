@@ -18,3 +18,7 @@ faster-whisper==1.2.1
 pytest==8.3.4
 qrcode==8.2
 cryptography==46.0.3
+numpy==2.4.6
+onnxruntime==1.31.0
+openwakeword==0.6.0
+sounddevice==0.5.6

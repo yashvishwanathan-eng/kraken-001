@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""  # secret: .env only
     smtp_from: str = ""  # e.g. "RingGuard <alerts@example.com>"
+    wake_model: str = "hey_jarvis_v0.1"  # openWakeWord model name; replace with the custom model once trained
+    wake_threshold: float = 0.5  # 0 to 1; higher is stricter (fewer false alarms, may miss some)
+    wake_cooldown_s: float = 2.0  # after a trigger, ignore the mic this long
+    wake_device: str = ""  # microphone number or name; empty = the default microphone
+    wake_ack_sound: str = "media/ack/yes_boss.wav"  # played on trigger; relative to backend/
     data_key: str = ""  # secret: encrypts guard personal details and computes badge lookups. Keep it safe.
     badge_window_s: int = 300  # a badge scan this recent covers an entry into its area
     presence_window_s: int = 900  # who is 'present' at a time: a scan this recent in that area
