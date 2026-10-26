@@ -239,22 +239,34 @@ class DebugMeter:
 OLD_ACK = BACKEND_DIR / "media" / "ack" / "yes_boss.wav"
 
 
-def ensure_rumik_ack(path: Path, speak=None) -> Path:
-    """ "Yes, boss" must be Friday's own (Rumik) voice. If the file is missing, ask Rumik once and save it;
-    if Rumik is not set up, fall back to the old recording so the listener still answers."""
-    if path.exists():
+def voice_signature() -> str:
+    s = get_settings()
+    return f"{s.rumik_model}|{s.rumik_speaker}|{s.rumik_description}"
+
+
+def ensure_rumik_ack(path: Path, speak=None, signature: str | None = None) -> Path:
+    """ "Yes, boss" must be Friday's own (Rumik) voice. If the file is missing, or was made with another voice
+    (RUMIK_SPEAKER changed), ask Rumik once and save it; if Rumik is not reachable, fall back to the old
+    recording so the listener still answers. A small .voice file next to it remembers which voice made it."""
+    signature = voice_signature() if signature is None else signature
+    marker = path.with_suffix(".voice")
+    if path.exists() and marker.exists() and marker.read_text() == signature:
         return path
+    if path.exists():
+        log.info("Friday's voice changed: making 'Yes, boss' again")
     try:
         if speak is None:
             from app.services.tts import speak
         audio, _ms = speak("Yes, boss.")
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(audio)
+        marker.write_text(signature)
         log.info("saved Friday's 'Yes, boss' in the Rumik voice: %s", path)
         return path
-    except Exception as exc:  # no key, no network: keep working with the old sound
-        log.warning("could not make 'Yes, boss' in the Rumik voice (%s): using %s", exc, OLD_ACK.name)
-        return OLD_ACK
+    except Exception as exc:  # no key, no network: keep working with what we have
+        fallback = path if path.exists() else OLD_ACK
+        log.warning("could not make 'Yes, boss' in the Rumik voice (%s): using %s", exc, fallback.name)
+        return fallback
 
 
 class WakeListener:

@@ -228,3 +228,20 @@ def test_empty_dashboard_url_keeps_the_default():
 
     assert Settings(dashboard_url="").dashboard_url == "http://localhost:5173"
     assert Settings(dashboard_url="http://10.0.0.5:5173").dashboard_url == "http://10.0.0.5:5173"
+
+
+def test_yes_boss_is_made_again_when_the_voice_changes(tmp_path):
+    from voice.wake import ensure_rumik_ack
+
+    target = tmp_path / "yes_boss_rumik.wav"
+    made = []
+
+    def speak(text):
+        made.append(text)
+        return f"RIFF-{len(made)}".encode(), 900
+
+    ensure_rumik_ack(target, speak, signature="mulberry|speaker_1|")
+    ensure_rumik_ack(target, speak, signature="mulberry|speaker_1|")
+    assert len(made) == 1
+    ensure_rumik_ack(target, speak, signature="mulberry|speaker_4|")  # RUMIK_SPEAKER changed
+    assert len(made) == 2 and target.read_bytes() == b"RIFF-2"
