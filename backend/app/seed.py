@@ -87,6 +87,16 @@ def seed_zones(db: Session, zones_file: Path = ZONES_FILE) -> int:
     return count
 
 
+def _find_by_name(db: Session, model, item: dict):
+    """The row with this name, or with an old name from `renamed_from` (so renaming a demo person keeps
+    their history and does not create a second person)."""
+    for name in [item["name"], *item.get("renamed_from", [])]:
+        row = db.scalar(select(model).where(model.name == name))
+        if row is not None:
+            return row
+    return None
+
+
 def parse_pins(text: str) -> dict[str, str]:
     """'anita=1111,vikram=2222' -> {'anita': '1111', 'vikram': '2222'}"""
     pairs = (item.split("=", 1) for item in text.split(",") if "=" in item)
@@ -103,7 +113,7 @@ def seed_users(db: Session, users_file: Path = USERS_FILE, pins: dict[str, str] 
         unknown = set(item["actions"]) - ACTIONS
         if unknown:
             raise ValueError(f"{item['key']}: unknown actions {sorted(unknown)}")
-        user = db.scalar(select(User).where(User.name == item["name"]))
+        user = _find_by_name(db, User, item)
         pin = pins.get(item["key"])
         if user is None:
             if pin is None:
@@ -115,6 +125,7 @@ def seed_users(db: Session, users_file: Path = USERS_FILE, pins: dict[str, str] 
             user = User(name=item["name"], pin_hash=hash_pin(pin))
         elif pin is not None and not verify_pin(pin, user.pin_hash):
             user.pin_hash = hash_pin(pin)
+        user.name = item["name"]  # a person listed under renamed_from gets the new name, keeping their history
         user.role, user.camera_ids, user.actions, user.active = item["role"], item["cameras"], item["actions"], True
         db.add(user)
     return lines
@@ -134,11 +145,12 @@ def seed_responders(db: Session, responders_file: Path = RESPONDERS_FILE,
     lines = []
     for item in raw.get("responders", []):
         phone = phones.get(item["user"])
-        user = db.scalar(select(User).where(User.name == item["name"]))
+        user = _find_by_name(db, User, item)
         if not phone:
             lines.append(f"{item['name']}: no phone in DEMO_RESPONDER_PHONES, not on the call roster")
             continue
-        row = db.scalar(select(Responder).where(Responder.name == item["name"])) or Responder(name=item["name"])
+        row = _find_by_name(db, Responder, item) or Responder(name=item["name"])
+        row.name = item["name"]
         row.phone, row.language, row.zone = phone, item.get("language", "en"), item["zone"]
         row.shift_start, row.shift_end = _hhmm(item["shift_start"]), _hhmm(item["shift_end"])
         row.call_order, row.active, row.user_id = item.get("call_order", 1), True, user.id if user else None

@@ -62,3 +62,27 @@ def test_invited_person_is_called_only_after_accepting(roster, monkeypatch):
     roster.get(User, out["user_id"]).active = True
     roster.commit()
     assert "Arjun" in [c.name for c in on_shift_contacts(roster)]
+
+
+def test_seed_renames_a_demo_person_instead_of_adding_one(db, tmp_path):
+    from app.seed import seed_cameras, seed_responders, seed_users
+
+    seed_cameras(db)
+    users = tmp_path / "users.yaml"
+    users.write_text("users:\n  - key: a\n    name: Anita Rao\n    role: Admin\n    cameras: []\n    actions: [all_cameras]\n")
+    seed_users(db, users, pins={"a": "1111"})
+    db.flush()
+    old_id = db.scalar(select(User.id).where(User.name == "Anita Rao"))
+    users.write_text("users:\n  - key: yash\n    name: Yash\n    renamed_from: [Anita Rao]\n    role: Admin\n"
+                     "    cameras: []\n    actions: [all_cameras]\n")
+    seed_users(db, users, pins={"yash": "1111"})
+    db.flush()  # as python -m app.seed does: people first, then their phones
+    roster_file = tmp_path / "roster.yaml"
+    roster_file.write_text("responders:\n  - user: yash\n    name: Yash\n    zone: control-room\n"
+                           "    shift_start: \"00:00\"\n    shift_end: \"00:00\"\n")
+    seed_responders(db, roster_file, phones={"yash": "+918778124338"})
+    db.commit()
+    assert db.scalar(select(User.id).where(User.name == "Yash")) == old_id
+    assert db.scalar(select(User.id).where(User.name == "Anita Rao")) is None
+    row = db.scalar(select(Responder).where(Responder.name == "Yash"))
+    assert (row.phone, row.user_id) == ("+918778124338", old_id)
