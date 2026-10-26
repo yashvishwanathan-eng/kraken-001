@@ -50,6 +50,7 @@ def test_wake_event_says_whether_the_software_is_open(roster, key, sent, monkeyp
         "answer": None,
         "speak_for_user_id": None,
         "camera_ids": None,
+        "open_path": None,
     }
     monkeypatch.setattr(manager, "online_user_ids", lambda: {anita_id(roster)})
     assert client.post("/internal/friday/event", json={"state": "listening"}, headers=key).json()["friday_user_online"]
@@ -114,3 +115,14 @@ def test_spoken_yes_confirms_and_anything_else_cancels(roster, key, sent, monkey
         ).json()
         assert calls[-1] == ("tok", expected)
         assert body["answer"] == ("Evacuating." if expected else "Cancelled. Nothing was done.")
+
+
+def test_show_the_recording_by_voice_opens_the_incident(roster, key, sent, monkeypatch):
+    from tests.conftest import make_incident
+
+    incident_id = make_incident(roster, type_="fire", severity="critical")
+    monkeypatch.setattr(friday_router, "transcribe", lambda data, name, ctype: ("show me the recording of the fire", "groq"))
+    out = client.post("/internal/friday/voice-command", files=AUDIO, headers=key).json()
+    assert out["intent"] == "show_recording" and f"incident {incident_id}" in out["answer"]
+    speaking = [m for m in sent if m.get("kind") == "friday" and m["state"] == "speaking"][-1]
+    assert speaking["open_path"] == f"/incidents/{incident_id}"

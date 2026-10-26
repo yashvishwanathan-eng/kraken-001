@@ -18,7 +18,7 @@ import cv2
 import numpy as np
 from sqlalchemy import select
 
-from app.config import get_settings
+from app.config import get_settings, media_root
 from app.db import SessionLocal
 from app.models import Zone
 from app.services.camera_registry import all_cameras
@@ -28,6 +28,7 @@ from worker.detectors import BagDetector, Person, PersonPoseTracker, hip_y, opti
 from worker.heartbeat import HeartbeatSender
 from worker.incidents import IncidentReporter
 from worker.mjpeg import MjpegServer
+from worker.recorder import ContinuousRecorder
 from worker.rules import BagObs, DetectionObs, PersonObs, RuleConfig, RulesEngine, ZoneDef
 
 REPORT_EVERY_S = 5.0
@@ -99,7 +100,18 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     ring = RingBuffer(settings.ring_buffer_s, settings.ring_max_width)
     reporter = IncidentReporter(camera.id, settings, ring)
     mjpeg = MjpegServer(camera.port).start()
-    capture = LatestFrameCapture(source, settings.detect_every_n_frames, on_frame=ring.add).start()
+    recorder = None
+    if settings.record_enabled:
+        recorder = ContinuousRecorder(camera.id, media_root() / "recordings", settings.record_fps,
+                                      settings.record_segment_s, settings.record_max_width, settings.record_crf,
+                                      settings.record_days, settings.record_min_free_gb).start()
+
+    def on_frame(image) -> None:  # every camera frame: the incident clip buffer and the all-day recording
+        ring.add(image)
+        if recorder is not None:
+            recorder.push(image)
+
+    capture = LatestFrameCapture(source, settings.detect_every_n_frames, on_frame=on_frame).start()
     live = {"fps": 0.0}  # analysed fps, read by the heartbeat thread
     heartbeat = HeartbeatSender(camera.id, settings, lambda: (capture.online, live["fps"])).start()
     log.info("camera %s: %d zones, stream on http://127.0.0.1:%d/stream", camera.id, len(zones), camera.port)
@@ -166,6 +178,8 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     finally:
         heartbeat.stop()
         capture.stop()
+        if recorder is not None:
+            recorder.stop()
         mjpeg.stop()
     return 0
 

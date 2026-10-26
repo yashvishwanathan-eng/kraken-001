@@ -819,3 +819,31 @@ class DemoIncidentIn(BaseModel):
 
 class VoiceCommandOut(CommandOut):
     transcript: str  # what Friday heard
+
+
+# ---------- recordings (P30): the all-day video of every camera ----------
+
+class RecordingSegment(BaseModel):
+    start: UtcDatetime
+    end: UtcDatetime  # last write; the file still being recorded grows until its 5 minutes are up
+    url: str  # /media/recordings/<camera_id>/<file>.mp4 (local, like clip_url)
+    size_mb: float
+
+
+class RecordingDaysOut(BaseModel):
+    camera_id: str
+    days: list[str]  # YYYY-MM-DD (IST), newest first
+
+
+class RecordingDayOut(BaseModel):
+    camera_id: str
+    date: str
+    segments: list[RecordingSegment]
+
+
+class RecordingAtOut(BaseModel):
+    camera_id: str
+    url: str
+    start: UtcDatetime
+    end: UtcDatetime
+    offset_s: float  # seconds into the file where that moment is

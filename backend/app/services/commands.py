@@ -29,7 +29,7 @@ from app.services.assistant import ask
 from app.services.audit import record
 from app.services.calls import calls
 from app.services.directory import contact_by_name, on_shift_contacts, on_shift_contacts_with_fallback
-from app.services.escalation import escalation
+from app.services.escalation import TYPE_LABELS, escalation, local_time_text
 from app.services.knowledge import knowledge
 from app.services.llm import choose_tool
 from app.services.permissions import allowed_cameras, can, can_see
@@ -58,6 +58,7 @@ PATTERNS: list[tuple[str, re.Pattern]] = [(intent, re.compile(p)) for intent, p 
     ("summary", r"\b(summary|summari[sz]e|recap)\b"),
     ("on_duty", r"\b(on|off) duty\b"),
     ("status_report", r"\bstatus( report)?\b"),
+    ("show_recording", r"\b(show|open|play|pull up|find)\b.*\b(recordings?|videos?|footage|clips?)\b"),
     ("show_camera", r"\b(show|open|display) (me )?(the )?cam(era)?s?\s*(?P<camera>[\w-]+((\s*(,|and|&)\s*)+[\w-]+)*)"),
     ("ack", r"\b(ack|acknowledge)\b"),
     ("resolve", r"\b(resolve|close)\b"),
@@ -86,6 +87,10 @@ TOOLS = [
           "period": {"type": "string", "enum": ["today", "yesterday"]},
           "cameras": {"type": "array", "items": {"type": "integer"}, "description": "camera numbers"}}),
         ("on_duty", "Say which guards are on duty and which are off duty.", {}),
+        ("show_recording", "Show the video recording of an incident (by number, by type like fire, or the latest) "
+         "or the all-day recordings of a camera.",
+         {"incident_id": {"type": "integer"}, "type": {"type": "string"},
+          "camera": {"type": "string", "description": "camera number or name"}}),
         ("query", "Answer a question about past incidents.", {"question": {"type": "string"}}),
         ("ack", "Acknowledge an incident.", {"incident_id": {"type": "integer"}}),
         ("resolve", "Resolve an incident.", {"incident_id": {"type": "integer"}}),
@@ -260,6 +265,9 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
     if intent == "summary":
         return _summary(args, user, text)
 
+    if intent == "show_recording":
+        return _show_recording(args, user, text)
+
     if intent == "on_duty":
         return CommandResult(intent, "done", _duty_report(user))
 
@@ -341,6 +349,46 @@ def _status_report(user: User) -> str:
     detail = ", ".join(f"{by_severity[s]} {s}" for s in ("critical", "high", "low") if by_severity.get(s))
     return (f"{open_total} open incident{'s' if open_total != 1 else ''}" + (f" ({detail})" if detail else "") +
             f". {len(online)} of {len(cameras)} cameras online.")
+
+
+RECORDING_TYPES = {"fire": "fire", "smoke": "fire", "fall": "fall", "fell": "fall", "bag": "unattended",
+                   "restricted": "access", "intruder": "access", "entry": "access", "crowd": "crowding",
+                   "helmet": "ppe", "vest": "ppe", "ppe": "ppe", "loiter": "loitering"}
+
+
+def _show_recording(args: dict, user: User, text: str) -> CommandResult:
+    """ "Show the recording of the fire / of incident 12 / of camera 2": the incident page (its clip and the
+    full recording around it) or the camera's all-day recordings."""
+    lowered = text.lower()
+    number = args.get("incident_id") or (m.group(1) if (m := re.search(r"incident (?:number )?(\d+)", lowered))
+                                         else None)
+    camera_word = args.get("camera") or (m.group(1) if (m := re.search(r"camera (\w+)", lowered)) else None)
+    if camera_word and not number:
+        camera = _find_camera(str(camera_word), user)
+        if camera is None:
+            return CommandResult("show_recording", "refused", "I couldn't find that camera.")
+        return CommandResult("show_recording", "done", f"Here are today's recordings of {camera.name}.",
+                             data={"open_path": f"/recordings?camera={camera.id}", "camera_id": camera.id})
+    kind = args.get("type") or next((t for word, t in RECORDING_TYPES.items() if word in lowered), None)
+    scope = allowed_cameras(user)
+    with SessionLocal() as db:
+        query = select(Incident).order_by(Incident.started_at.desc())
+        if number:
+            query = query.where(Incident.id == int(number))
+        elif kind:
+            query = query.where(Incident.type == RECORDING_TYPES.get(str(kind).lower(), str(kind).lower()))
+        if scope is not None:
+            query = query.where(Incident.camera_id.in_(scope))
+        incident = db.scalars(query.limit(1)).first()
+        if incident is None:
+            return CommandResult("show_recording", "refused", "I couldn't find that incident.")
+        camera_name = incident.camera.name if incident.camera else incident.camera_id
+        when = local_time_text(incident.started_at, get_settings().timezone)
+        label = TYPE_LABELS.get(incident.type, incident.type).lower()
+        return CommandResult("show_recording", "done",
+                             f"Here's the recording of incident {incident.id}, {label} on {camera_name} at {when}.",
+                             data={"open_path": f"/incidents/{incident.id}", "incident_id": incident.id,
+                                   "camera_id": incident.camera_id})
 
 
 def _find_camera(text: str, user: User) -> Camera | None:

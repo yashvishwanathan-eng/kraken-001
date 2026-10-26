@@ -247,3 +247,23 @@ export function bytes(n: number | null | undefined): string {
 }
 
 export const mediaUrl = resolveMediaUrl
+
+/* ── Recordings (P30): the all-day video of every camera ── */
+
+export interface RecordingSegment {
+  start: string
+  end: string
+  url: string
+  size_mb: number
+}
+
+export const getRecordingDays = (cameraId: string) =>
+  http.get<{ camera_id: string; days: string[] }>(`/recordings/days?camera_id=${encodeURIComponent(cameraId)}`)
+
+export const getRecordingDay = (cameraId: string, date?: string) =>
+  http.get<{ camera_id: string; date: string; segments: RecordingSegment[] }>(
+    `/recordings?camera_id=${encodeURIComponent(cameraId)}${date ? `&date=${date}` : ''}`)
+
+export const getRecordingAt = (cameraId: string, at: string) =>
+  http.get<{ camera_id: string; url: string; start: string; end: string; offset_s: number }>(
+    `/recordings/at?camera_id=${encodeURIComponent(cameraId)}&at=${encodeURIComponent(at)}`)

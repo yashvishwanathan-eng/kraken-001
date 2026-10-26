@@ -59,6 +59,14 @@ export function AssistantPage() {
     navigate(`/live?cameras=${encodeURIComponent(ids.join(','))}`)
   }, [friday.cameraIds, navigate])
 
+  // "Show the recording of the fire": open that incident (or the recordings page) at once
+  useEffect(() => {
+    if (!friday.openPath) return
+    const path = friday.openPath
+    clearCameraRequest()
+    navigate(path)
+  }, [friday.openPath, navigate])
+
   const submit = (value: string) => {
     setText('')
     void ask(value)

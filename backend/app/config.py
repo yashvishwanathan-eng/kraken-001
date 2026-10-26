@@ -165,6 +165,14 @@ class Settings(BaseSettings):
     clip_after_s: float = 5.0
     ring_buffer_s: float = 12.0
     ring_max_width: int = 640  # frames are shrunk to this width before buffering
+    # continuous recording of every camera (worker/recorder.py): media/recordings/<camera>/<start>.mp4
+    record_enabled: bool = True
+    record_fps: float = 10.0  # frames per second saved (a steady pace, whatever the camera sends)
+    record_segment_s: int = 300  # one file per 5 minutes
+    record_max_width: int = 960
+    record_crf: int = 28  # H.264 quality: lower = better and bigger (about 2-4 GB per camera per day at 28)
+    record_days: float = 7  # keep this many days
+    record_min_free_gb: float = 10  # delete the oldest files sooner if free disk space drops below this
 
 
 class CameraConfig(BaseModel):

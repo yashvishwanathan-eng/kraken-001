@@ -60,10 +60,11 @@ def friday_user() -> User:
 
 
 def _notice(state: str, heard: str | None = None, answer: str | None = None, speak_for: int | None = None,
-            camera_ids: list[str] | None = None) -> dict:
-    """camera_ids: "show cameras 3 and 4" -> the dashboard opens the Live page with them at once."""
+            camera_ids: list[str] | None = None, open_path: str | None = None) -> dict:
+    """camera_ids: "show cameras 3 and 4" -> the dashboard opens the Live page with them at once.
+    open_path: "show the recording of the fire" -> the dashboard opens that page (an incident, recordings)."""
     return {"kind": "friday", "state": state, "heard": heard, "answer": answer, "speak_for_user_id": speak_for,
-            "camera_ids": camera_ids}
+            "camera_ids": camera_ids, "open_path": open_path}
 
 
 def _cameras(result) -> list[str] | None:
@@ -124,7 +125,7 @@ async def voice_command(audio: UploadFile = File(...), confirm_token: str | None
         "source": result.data.get("source"), "via": "wake word"})
     await _push(result.notices)
     await manager.broadcast(_notice("speaking", transcript, result.answer, user.id if on_screen else None,
-                                    _cameras(result)))
+                                    _cameras(result), result.data.get("open_path")))
     return ListenerCommandOut(transcript=transcript, intent=result.intent, status=result.status, answer=result.answer,
                               confirm_token=result.confirm_token, ms=int((time.perf_counter() - t0) * 1000),
                               data=result.data, spoken_by=spoken_by)

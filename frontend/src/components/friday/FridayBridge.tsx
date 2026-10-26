@@ -28,6 +28,7 @@ interface FridayNotice {
   answer?: string
   speak_for_user_id?: number | null
   camera_ids?: string[] | null
+  open_path?: string | null
 }
 
 function incidentFrom(event: unknown): Incident | null {
@@ -71,6 +72,7 @@ export function FridayBridge() {
     if (notice && typeof notice === 'object' && notice.kind === 'friday') {
       // "show cameras 3 and 4": open them now, while she is still talking
       if (notice.camera_ids?.length) navigate(`/live?cameras=${encodeURIComponent(notice.camera_ids.join(','))}`)
+      else if (notice.open_path?.startsWith('/')) navigate(notice.open_path)
       if (notice.state === 'listening' && pathRef.current !== '/assistant') navigate('/assistant')
       showState(notice.state === 'speaking' ? 'speaking' : notice.state, { heard: notice.heard, answer: notice.answer })
       if (notice.state === 'speaking' && notice.answer && isSpeaker() && notice.speak_for_user_id && String(notice.speak_for_user_id) === String(user?.id)) {
