@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from voice.wake import CHUNK_SAMPLES, SAMPLE_RATE, WakeListener, WakeTrigger, best_score, read_wav_samples
+from voice.wake import CHUNK_SAMPLES, SAMPLE_RATE, WakeListener, WakeTrigger, best_score, device_choice, read_wav_samples
 
 
 def test_triggers_once_when_the_score_passes_the_threshold():
@@ -75,3 +75,11 @@ def test_the_real_model_stays_quiet_on_silence():
     silence = np.zeros(CHUNK_SAMPLES * 10, dtype=np.int16)
     scores = [best_score(model.predict(silence[i:i + CHUNK_SAMPLES])) for i in range(0, len(silence), CHUNK_SAMPLES)]
     assert max(scores) < 0.05
+
+
+def test_a_number_means_a_device_index_not_a_name():
+    assert device_choice("1") == 1
+    assert device_choice(" 26 ") == 26
+    assert device_choice("Microphone Array") == "Microphone Array"
+    assert device_choice("") is None
+    assert device_choice(None) is None

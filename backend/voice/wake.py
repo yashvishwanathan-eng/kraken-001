@@ -40,6 +40,16 @@ class WakeTrigger:
         return False
 
 
+def device_choice(value: str | int | None) -> int | str | None:
+    """A number means a device index ("1" -> 1). Anything else is a name, and an empty value means the default."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, int):
+        return value
+    text = value.strip()
+    return int(text) if text.isdigit() else text
+
+
 def best_score(scores: dict[str, float]) -> float:
     """openWakeWord gives one score per wake-word model; the highest one counts."""
     return max(scores.values(), default=0.0)
@@ -71,7 +81,7 @@ class WakeListener:
         s = get_settings()
         self.model_name = s.wake_model
         self.trigger = WakeTrigger(threshold if threshold is not None else s.wake_threshold, s.wake_cooldown_s)
-        self.device = device if device is not None else (s.wake_device or None)
+        self.device = device_choice(device if device is not None else s.wake_device)
         self.ack_path = ack_sound or (BACKEND_DIR / s.wake_ack_sound)
         self.ack_samples = read_wav_samples(self.ack_path) if self.ack_path and self.ack_path.exists() else None
         if self.ack_samples is None:

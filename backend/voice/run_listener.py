@@ -22,8 +22,7 @@ def main() -> None:
     if args.list_devices:
         print(list_devices())
         return
-    device = int(args.device) if args.device and args.device.isdigit() else args.device
-    WakeListener(threshold=args.threshold, device=device).run()
+    WakeListener(threshold=args.threshold, device=args.device).run()
 
 
 if __name__ == "__main__":
