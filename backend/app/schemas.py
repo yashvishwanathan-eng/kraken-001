@@ -23,7 +23,7 @@ Severity = Literal["critical", "high", "low"]
 Status = Literal["open", "acknowledged", "resolved", "false_alarm"]
 TimelineAction = Literal[
     "detected", "call_placed", "call_no_answer", "acknowledged", "escalated", "whatsapp_sent", "resolved",
-    "false_alarm", "roll_call_responded", "roll_call_safe", "alert_all", "command", "duty_fallback",
+    "false_alarm", "roll_call_responded", "roll_call_safe", "alert_all", "command", "duty_fallback", "call_skipped_on_screen",
 ]
 Via = Literal["keypad", "voice", "dashboard"]
 
@@ -791,3 +791,10 @@ class UsageOut(BaseModel):
 
 class SpeakIn(BaseModel):
     text: Annotated[str, Field(min_length=1, max_length=1000)]
+
+
+# ---------- demo alarm ----------
+
+class DemoIncidentIn(BaseModel):
+    type: IncidentType = "fire"
+    camera_id: str | None = None  # default: your first camera

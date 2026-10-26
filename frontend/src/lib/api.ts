@@ -269,6 +269,7 @@ export async function fetchMe(): Promise<MeResponse> {
         'alert_all',
         'broadcast',
         'assistant',
+        'run_demo',
       ],
     }
   }
@@ -595,4 +596,38 @@ export async function fetchSummary(from?: string, to?: string): Promise<SectorSu
   if (to)   q.set('to', to)
   const qs = q.toString()
   return get<SectorSummary>(`/summary${qs ? `?${qs}` : ''}`)
+}
+
+/* ── Demo alarm ─────────────────────────────────────────── */
+
+export type DemoIncidentType = 'fire' | 'fall' | 'access'
+
+/**
+ * Raises a demo alarm (needs the run_demo action). It is a real incident: every dashboard gets it and the
+ * real call ladder starts. In mock mode a fake incident with the first ladder steps comes back.
+ */
+export async function raiseDemoIncident(type: DemoIncidentType, camera_id?: string): Promise<Incident> {
+  if (USE_MOCKS) {
+    const now = new Date().toISOString()
+    return {
+      id: Math.floor(Math.random() * 1000) + 5000,
+      type,
+      severity: type === 'access' ? 'high' : 'critical',
+      status: 'open',
+      camera_id: camera_id ?? 'cam-east-wing',
+      camera_name: 'East Wing, Loading Bay 2',
+      zone: 'loading-bay',
+      started_at: now,
+      confidence: 1,
+      snapshot_url: '',
+      clip_url: '',
+      timeline: [
+        { at: now, action: 'detected' },
+        { at: now, action: 'call_placed', to: 'Ravi Kumar' },
+        { at: now, action: 'whatsapp_sent', to: 'Anita Rao' },
+      ],
+    }
+  }
+  const incident = await post<Incident>('/demo/incident', { type, camera_id })
+  return normalizeIncident(incident)
 }

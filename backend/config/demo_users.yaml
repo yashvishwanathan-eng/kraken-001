@@ -10,7 +10,7 @@ users:
     name: Anita Rao
     role: Admin
     cameras: []
-    actions: [all_cameras, ack, resolve, manage_users, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant, manage_sites, manage_guards, view_guard_details, scan_badges, manage_cameras]
+    actions: [all_cameras, ack, resolve, manage_users, view_audit, manage_zones, manage_responders, alert_all, broadcast, assistant, manage_sites, manage_guards, view_guard_details, scan_badges, manage_cameras, run_demo]
   - key: vikram
     name: Vikram Shah
     role: Manager

@@ -82,6 +82,7 @@ Status tags:
 | GET | /overview | live (P24) | | `{at, cameras_total, cameras_online, cameras_offline, workers_running, cameras[], open_incidents, open_by_severity, problems_now[], past_problems[{date,count}], past_total_7d, guards_on_duty[], guards_off_duty[], ok, text}` |
 | GET | /activity | live (P24) | Query: from, to (default last 24 h), user | `{from, to, users[], ai[], camera_views[]}` (view_audit: Admin and Manager) |
 | GET | /usage | live (P24) | | `{media_total_bytes, snapshots, clips, other_media, worker_logs, disk_free_bytes, disk_total_bytes, database_bytes, rows{}, incidents_by_day[], ai_queries_by_day[]}` (view_audit) |
+| POST | /demo/incident | live (P25) | `{type: incident type (default fire), camera_id?}` | 201 incident object. A real incident (dashboards + call ladder), audited as `demo_incident`. Needs `run_demo`. 404 for a camera you cannot see. |
 | POST | /assistant/speak | live (P24) | `{text}` | `audio/wav` in the Rumik Silk voice; 503 if Rumik is not set up or does not answer |
 | GET | /stats | live | | `{by_type:{...}, by_day:[{date,count}], open, resolved, avg_response_s}` |
 | POST | /twilio/voice, /twilio/gather, /twilio/status | live | Twilio webhooks | Twilio only. TwiML responses. |
@@ -111,7 +112,7 @@ Status tags:
 - `status`: open, acknowledged, resolved, false_alarm
 - `channel`: dashboard, phone, voice
 - Timeline `action`:
-  - **(live)**: detected, call_placed, call_no_answer, escalated, whatsapp_sent, acknowledged, resolved, false_alarm, roll_call_responded, roll_call_safe, alert_all, duty_fallback (P23)
+  - **(live)**: detected, call_placed, call_no_answer, escalated, whatsapp_sent, acknowledged, resolved, false_alarm, roll_call_responded, roll_call_safe, alert_all, duty_fallback (P23), call_skipped_on_screen (P25: someone on the dashboard reacted within the grace period, so their call was never placed; `to` = their name)
   - **(confirmed, not used yet)**: command
 - Timeline `via` (on acknowledged): keypad, voice, dashboard
 
@@ -151,7 +152,10 @@ Gate 2 needed these details, which the contract did not settle. The backend does
 - **P23. Duty check-in.** Head Guards and Guards (`DUTY_ROLES`) check in and out by QR: the control room scans the guard's personal pass (`/duty/scan`), or the guard scans the post's printed QR with their phone (`/duty/check-in`), or a supervisor sets it (`/duty/set`). A scan toggles unless `action` says in or out. On duty = latest event is "in" and under `DUTY_MAX_H` old. The call ladder, alert everybody, broadcast and "call zone" call only on-duty guards. If nobody of the needed role is on duty, the shift roster is called instead, the timeline gets `duty_fallback` and the Head Guards get a WhatsApp warning, so nothing is dropped. Admins and managers do not check in. `/ws/events` sends `{"kind":"duty", user_id, name, action, method, at, area_id, by}` on every change.
 - **P24. Overview, activity, usage, voice.** `/overview` is the main dashboard in one call, scoped to the caller's cameras: `problems_now[]` items are `{kind: incident | camera_offline | no_guard_on_duty, severity, text, incident_id?, camera_id?}`. `/activity` is for Admin and Manager only (a Head Guard gets 403): every assistant question and command with its answer, every camera feed opened (one row per user and camera per 5 minutes), and per-person totals, including the admin's own. The assistant does not learn from use; this is a record. `/assistant/command` understands summaries ("summary for today", "for the past hour", "for cameras 6, 7 and 8 for the past hour", "yesterday"), "who is on duty", and "show cameras 3, 4 and 12" (`data.camera_ids`). `/assistant/speak` reads a reply in the Rumik Silk voice.
 
+- **P25. Calls depend on who is on the software; demo alarm.** A user is "on the software" while a dashboard of theirs is connected to `/ws/events`. Admin and Manager call steps: not on the software, the call goes out at once; on the software, they get `ONSCREEN_GRACE_S` (5 s) to react on screen first, and acknowledging in that time cancels the call (timeline `call_skipped_on_screen`). Critical: Head Guard 0 s, Admin 0 s (5 s on screen), Manager 5 s (10 s on screen). High: Head Guard 0 s, Manager 0 s (5 s on screen); the Admin still gets WhatsApp only. `POST /demo/incident` raises a demo alarm. New action: `run_demo`. The rest of P25 (Friday voice) follows.
+
 ## Changelog
+- 26 Oct: P25 (first part) live: on-screen grace in the call ladder, `call_skipped_on_screen`, `POST /demo/incident`, action `run_demo`. Settings `CRITICAL_ADMIN_DELAY_S`, `CRITICAL_MANAGER_DELAY_S`, `HIGH_MANAGER_DELAY_S` replaced by `ONSCREEN_GRACE_S=5`.
 - 26 Oct: P22 (adding and installing cameras, camera numbers, roles, staff IDs), P23 (duty check-in by QR, off-duty guards not called, roster fallback with `duty_fallback`) and P24 (overview, activity log, data usage, voice summaries, Rumik voice) are live on the backend. Additive except: `UserCreate`/`InviteCreate` lists became optional. The frontend builds the screens.
 - 25 Oct: P21 added: sites and areas, guard profiles with encrypted personal details, badge scans, presence, and manager delegation. Endpoints are live.
 - 25 Oct: P19 (invitations by email, with a link and a QR code) and P20 (sector summaries) are live on the backend for the frontend to build. P19 and P20 are agreed by Kirito; the frontend builds the screens.

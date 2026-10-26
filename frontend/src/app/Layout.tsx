@@ -32,6 +32,7 @@ import { fetchHealth } from '@/lib/api'
 import { nowIST } from '@/lib/time'
 import { useAuth } from '@/lib/auth'
 import { wsClient } from '@/lib/ws'
+import { DemoAlert } from '@/components/demo/DemoAlert'
 import type { AlertAllNotice } from '@/lib/types'
 
 const NAV = [
@@ -240,6 +241,7 @@ export function Layout() {
 
             {/* Right section: Clock, User profile, Logout */}
             <div className="flex items-center gap-4 shrink-0">
+              <DemoAlert />
               {/* Clock with AM/PM in capitals */}
               <time
                 className="text-xs tabular text-[var(--text-secondary)] shrink-0 font-mono hidden md:inline"

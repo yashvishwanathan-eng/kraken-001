@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     heartbeat_timeout_s: int = 30
     low_repeat_count: int = 3
     low_repeat_window_min: int = 60
-    critical_admin_delay_s: int = 60
+    onscreen_grace_s: float = 5.0  # on the dashboard: this long to react before the phone rings
     stream_token_ttl_s: int = 3600
     api_base_url: str = "http://127.0.0.1:8000"  # where workers send /internal calls
     session_ttl_h: float = 12.0  # a login lasts one shift
@@ -101,8 +101,6 @@ class Settings(BaseSettings):
     twilio_cps: float = 1.0  # Twilio places about 1 new call per second by default
     call_ring_timeout_s: int = 30
     call_language: str = "en-IN"
-    critical_manager_delay_s: int = 120
-    high_manager_delay_s: int = 60
     role_admin: str = "Admin"  # role labels the call ladder looks for
     role_manager: str = "Manager"
     role_head_guard: str = "Head Guard"

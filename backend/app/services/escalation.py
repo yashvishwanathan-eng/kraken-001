@@ -2,11 +2,13 @@
 
 Critical (fire, fall, restricted entry at night):
     0 s   call the Head Guard for that camera; WhatsApp the Admin (with snapshot link)
-    60 s  call the Admin
-    2 min call the Manager
+    0 s   call the Admin           (5 s if the Admin has a dashboard open: time to react on screen)
+    5 s   call the Manager         (10 s if the Manager has a dashboard open)
 High (restricted entry by day, unattended bag, crowding):
     0 s   call the Head Guard; WhatsApp the Admin
-    60 s  call the Manager
+    0 s   call the Manager         (5 s if on screen)
+Someone on the software sees the red alert first; acknowledging within ONSCREEN_GRACE_S cancels their call
+(timeline: call_skipped_on_screen). Someone away from it is called at once.
 Low (ppe, loitering):
     0 s   WhatsApp the zone manager; no calls
     and if the same zone has 3 low incidents within 1 hour, call the Head Guard once
@@ -55,15 +57,15 @@ class Step:
     delay_s: float
     action: str  # call, whatsapp
     who: str  # head_guard, admin, manager, zone_manager
+    defer_on_screen: bool = False  # the target has a dashboard open: wait ONSCREEN_GRACE_S before calling
 
 
 def ladder_for(severity: str, s: Settings) -> list[Step]:
     if severity == "critical":
         return [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"),
-                Step(s.critical_admin_delay_s, "call", "admin"), Step(s.critical_manager_delay_s, "call", "manager")]
+                Step(0, "call", "admin", True), Step(s.onscreen_grace_s, "call", "manager", True)]
     if severity == "high":
-        return [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"),
-                Step(s.high_manager_delay_s, "call", "manager")]
+        return [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"), Step(0, "call", "manager", True)]
     return [Step(0, "whatsapp", "zone_manager")]
 
 
@@ -88,6 +90,7 @@ class Escalation:
         self._repeat_called: dict[tuple[str, str], float] = {}  # (camera, zone) -> monotonic time of repeat call
         self._silent_alerted: set[str] = set()
         self._duty_warned: set[int] = set()  # incidents whose Head Guards were already told nobody is on duty
+        self._waiting: dict[str, str] = {}  # job id of a call held back for someone on screen -> their name
         self._lock = threading.Lock()
 
     # ---------- lifecycle (API startup/shutdown) ----------
@@ -127,9 +130,22 @@ class Escalation:
     def stop(self, incident_id: int, except_call_id: int | None = None) -> None:
         """Someone acknowledged or closed it: no more calls for this incident."""
         prefix = f"ladder:{incident_id}:"
+        skipped = []
         for job in self.scheduler.get_jobs():
             if job.id.startswith(prefix):
                 job.remove()
+                with self._lock:
+                    name = self._waiting.pop(job.id, None)
+                if name:
+                    skipped.append(name)  # they reacted on screen within the grace period: the call never happens
+        if skipped:
+            with SessionLocal() as db:
+                incident = incident_ops.load(db, incident_id)
+                if incident is not None:
+                    for name in skipped:
+                        incident_ops.add_timeline(incident, "call_skipped_on_screen", to=name)
+                    db.commit()
+                    manager.publish_from_thread(incident_ops.to_message(incident))
         cancelled = self.calls.cancel_pending(incident_id)
         hung = self.calls.hang_up_active(incident_id, except_call_id) if self.calls.mode == "live" else 0
         log.info("incident=%d step=ladder_stopped queued_cancelled=%d hung_up=%d", incident_id, cancelled, hung)
@@ -161,20 +177,40 @@ class Escalation:
             if self.whatsapp.send(contact.phone, text, None):
                 incident_ops.add_timeline(incident, "whatsapp_sent", to=contact.name)
 
-    def run_step(self, incident_id: int, index: int) -> None:
+    def run_step(self, incident_id: int, index: int, deferred: bool = False) -> None:
+        """deferred=True: the second run of an on-screen step, after the grace period."""
         t0 = time.perf_counter()
+        if deferred:
+            with self._lock:
+                self._waiting.pop(f"ladder:{incident_id}:{index}", None)
         with SessionLocal() as db:
             incident = incident_ops.load(db, incident_id)
             if incident is None:
                 return
+            step = ladder_for(incident.severity, self.settings)[index]
             if incident.status != "open":
                 log.info("incident=%d step=%d skipped: already %s", incident_id, index, incident.status)
+                if deferred:
+                    contacts, _ = self._contacts(db, step.who, incident)
+                    if contacts:
+                        incident_ops.add_timeline(incident, "call_skipped_on_screen", to=contacts[0].name)
+                        db.commit()
+                        manager.publish_from_thread(incident_ops.to_message(incident))
                 return
-            step = ladder_for(incident.severity, self.settings)[index]
             contacts, fallback = self._contacts(db, step.who, incident)
             if not contacts:
                 log.warning("incident=%d step=%d no %s with a phone number on the roster", incident_id, index,
                             step.who)
+                return
+            if step.defer_on_screen and not deferred and contacts[0].user_id in manager.online_user_ids():
+                run_at = datetime.now(timezone.utc) + timedelta(seconds=self.settings.onscreen_grace_s)
+                job_id = f"ladder:{incident_id}:{index}"
+                self.scheduler.add_job(self.run_step, "date", run_date=run_at, args=[incident_id, index, True],
+                                       id=job_id, replace_existing=True, misfire_grace_time=60)
+                with self._lock:
+                    self._waiting[job_id] = contacts[0].name
+                log.info("incident=%d step=%d %s is on screen: calling in %.0f s unless acknowledged",
+                         incident_id, index, contacts[0].name, self.settings.onscreen_grace_s)
                 return
             badge = incident_badge_status(db, incident) if incident.type == "access" else None
             text = alert_text(incident, self.settings.timezone, badge)

@@ -26,6 +26,7 @@ MessageFilter = Callable[[dict], bool]
 class ConnectionManager:
     def __init__(self) -> None:
         self._clients: dict[WebSocket, MessageFilter] = {}
+        self._users: dict[WebSocket, int] = {}  # which user each dashboard belongs to ("on the software")
         self.loop: asyncio.AbstractEventLoop | None = None  # set when the API starts
 
     def publish_from_thread(self, message: dict) -> None:
@@ -35,12 +36,19 @@ class ConnectionManager:
             return
         asyncio.run_coroutine_threadsafe(self.broadcast(message), self.loop)
 
-    async def connect(self, websocket: WebSocket, allow: MessageFilter) -> None:
+    async def connect(self, websocket: WebSocket, allow: MessageFilter, user_id: int | None = None) -> None:
         await websocket.accept()
         self._clients[websocket] = allow
+        if user_id is not None:
+            self._users[websocket] = user_id
 
     def disconnect(self, websocket: WebSocket) -> None:
         self._clients.pop(websocket, None)
+        self._users.pop(websocket, None)
+
+    def online_user_ids(self) -> set[int]:
+        """Users with at least one dashboard open right now. The call ladder gives them 5 s on screen first."""
+        return set(self._users.values())
 
     @property
     def count(self) -> int:

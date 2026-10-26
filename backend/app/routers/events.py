@@ -132,7 +132,7 @@ async def ws_events(websocket: WebSocket, token: str = "") -> None:
     scope = allowed_cameras(user)
     # incidents: only delegated cameras; notices (alert_all, roll_call) carry no camera_id and go to everyone
     await manager.connect(websocket, lambda message: scope is None or "camera_id" not in message
-                          or message["camera_id"] in scope)
+                          or message["camera_id"] in scope, user_id=user.id)
     try:
         while True:
             await websocket.receive_text()  # the dashboard may send pings; we only listen to keep it open

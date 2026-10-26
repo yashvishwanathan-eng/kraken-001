@@ -52,9 +52,9 @@ def timeline(db, incident_id):
 def test_ladders_match_the_rules():
     s = get_settings()
     assert [(st.delay_s, st.action, st.who) for st in ladder_for("critical", s)] == [
-        (0, "call", "head_guard"), (0, "whatsapp", "admin"), (60, "call", "admin"), (120, "call", "manager")]
+        (0, "call", "head_guard"), (0, "whatsapp", "admin"), (0, "call", "admin"), (5, "call", "manager")]
     assert [(st.delay_s, st.action, st.who) for st in ladder_for("high", s)] == [
-        (0, "call", "head_guard"), (0, "whatsapp", "admin"), (60, "call", "manager")]
+        (0, "call", "head_guard"), (0, "whatsapp", "admin"), (0, "call", "manager")]
     assert [(st.action, st.who) for st in ladder_for("low", s)] == [("whatsapp", "zone_manager")]
 
 
@@ -66,7 +66,7 @@ def test_critical_ladder_calls_head_guard_then_admin_then_manager(ladder, roster
     assert sorted(jobs) == [f"ladder:{incident_id}:{i}" for i in range(4)]
     delays = sorted(round((j.run_date - jobs[f"ladder:{incident_id}:0"].run_date).total_seconds())
                     for j in jobs.values())
-    assert delays == [0, 0, 60, 120]
+    assert delays == [0, 0, 0, 5]  # nobody on screen: Admin at once, Manager 5 s later
     for i in range(4):
         ladder.scheduler.run(f"ladder:{incident_id}:{i}")
     assert timeline(roster, incident_id) == [

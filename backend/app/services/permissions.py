@@ -38,6 +38,7 @@ ACTIONS = {
     "scan_badges",  # badge reader or laptop
     "delegate_cameras",  # create and edit users, but only with cameras and actions this user already has
     "manage_cameras",  # add, edit, test, start and stop cameras (P22)
+    "run_demo",  # raise a demo alarm from the dashboard (it runs the real call ladder)
 }
 
 BCRYPT_ROUNDS = 10  # about 70 ms per check: fine for a login, slow for someone guessing PINs

@@ -189,7 +189,9 @@ def test_share_links_are_signed(roster):
         (media_root() / "share-test.jpg").unlink()
 
 
-def test_calls_off_without_keys(roster):
+def test_calls_off_without_keys(roster, monkeypatch):
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "calls_mode", "auto")  # whatever .env says: auto + no keys = off
     assert calls.mode == "off"  # no Twilio keys in the test settings
 
 

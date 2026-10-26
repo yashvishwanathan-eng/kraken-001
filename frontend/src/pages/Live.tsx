@@ -8,7 +8,7 @@
  * - Meaningful status indicators only.
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -79,6 +79,13 @@ export function LivePage() {
     }
   }, [initialEvents])
 
+  // Incidents already announced: later updates of the same incident (each call, WhatsApp, acknowledgement)
+  // refresh the list but never beep or pop up again.
+  const announcedIds = useRef<Set<number>>(new Set())
+  useEffect(() => {
+    initialEvents?.forEach(i => announcedIds.current.add(i.id))
+  }, [initialEvents])
+
   // Handle incoming real-time incident
   const handleIncomingIncident = useCallback((incident: Incident) => {
     // Prepend newest first
@@ -89,6 +96,9 @@ export function LivePage() {
       }
       return [incident, ...prev]
     })
+
+    if (announcedIds.current.has(incident.id) || incident.status !== 'open') return
+    announcedIds.current.add(incident.id)
 
     // Critical Alert: clean toast + beep + camera tile pulse
     if (incident.severity === 'critical') {

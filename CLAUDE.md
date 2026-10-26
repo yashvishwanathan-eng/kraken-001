@@ -110,12 +110,11 @@ See `docs/CONTRACT.md`. Endpoints, request and response shapes, the incident obj
 - `SESSION_TTL_H=12` (a login lasts one shift). `LOGIN_MAX_FAILURES=5` per `LOGIN_WINDOW_S=60`.
 - `PREFER_OPENVINO=true` (use the OpenVINO export when it exists; about 2x faster on Intel CPUs).
 - `CALLS_MODE` / `WHATSAPP_MODE`: `auto` (live when the keys are set, else off), `live`, `simulate` (pretend; for demos and tests), `off`.
-- `TWILIO_CPS=1` (new calls per second), `CALL_RING_TIMEOUT_S=30`, `CALL_LANGUAGE=en-IN`. Ladder delays: `CRITICAL_ADMIN_DELAY_S=60`, `CRITICAL_MANAGER_DELAY_S=120`, `HIGH_MANAGER_DELAY_S=60`.
+- `TWILIO_CPS=1` (new calls per second), `CALL_RING_TIMEOUT_S=30`, `CALL_LANGUAGE=en-IN`. On-screen grace: `ONSCREEN_GRACE_S=5` (replaces the old 60 s / 2 min ladder delays).
 - Role labels the ladder looks for: `ROLE_ADMIN=Admin`, `ROLE_MANAGER=Manager`, `ROLE_HEAD_GUARD=Head Guard`, `ROLE_GUARD=Guard`.
 - `LLM_TIMEOUT_S=5` (Groq), `OLLAMA_TIMEOUT_S=10`, `ASSISTANT_CONFIRM_TTL_S=60`, `KNOWLEDGE_DIR=knowledge`.
 - PPE/fire labels: `PPE_HELMET_LABELS`, `PPE_VEST_LABELS`, `FIRE_LABELS` (class names differ between models), `PPE_MISSING_FRAMES=10`, `FIRE_FRAMES=5`.
 - `LOW_REPEAT_COUNT=3`, `LOW_REPEAT_WINDOW_MIN=60`.
-- `CRITICAL_ADMIN_DELAY_S=60` (critical: admin is called after the head guard has had 60 s).
 
 ## Escalation and calls (confirmed 18 Oct)
 Times are cumulative from incident creation. A ladder stops at the first acknowledgement, from any channel.
@@ -123,12 +122,12 @@ Times are cumulative from incident creation. A ladder stops at the first acknowl
 Routing by severity:
 - **Critical** (fire, fall; restricted entry at night):
   - 0 s: call the Head Guard of that camera's group. WhatsApp the Admin (snapshot).
-  - 60 s: call the Admin.
-  - 2 min: call the Manager (fallback if the Admin does not answer). Confirmed.
+  - 0 s: call the Admin (5 s if the Admin has a dashboard open: time to react on screen; acknowledging cancels the call). Changed 26 Oct.
+  - 5 s: call the Manager (10 s if on screen). Changed 26 Oct (was 60 s and 2 min).
   - Never call above Admin.
 - **High** (restricted entry in the day, unattended bag, crowding):
   - 0 s: call the Head Guard of that camera's group. WhatsApp the Admin.
-  - 60 s: call the Manager.
+  - 0 s: call the Manager (5 s if on screen).
   - The Admin gets WhatsApp only, not a call.
 - **Low** (ppe, loitering):
   - No calls.
@@ -213,5 +212,6 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Done (25 Oct): invitations by email with link and QR (P19); sector summaries (P20); sites, buildings, areas and camera placement; guard profiles with encrypted personal details (admin only), replace-on-save, field-only audit; badge scans; presence; "no badge scanned" on restricted entries (alert and summary); manager delegation of cameras and actions (P21); Docker PostgreSQL file. Not yet built: wake word and voice navigation, dataset training, phone automation for area alerts.
 - Done (26 Oct, voice Step 1): wake-word listener with openWakeWord (`backend/voice/wake.py`, `python -m voice.run_listener`): trigger rules with a cooldown, plays `media/ack/yes_boss.wav`, settings WAKE_*. Tests use fake scores; the real microphone test is still to be done on the laptop.
 - Done (26 Oct, P22–P24): cameras added, tested, numbered and started from the API (workers read cameras from the database; `WORKERS_AUTOSTART` restarts crashed ones); role templates (`/roles`) with cameras and actions; staff IDs in invitations; duty check-in by QR pass or post QR, off-duty guards not called, shift-roster fallback with `duty_fallback` + Head Guard WhatsApp; `/overview`, `/activity` (AI questions/answers, camera views; Admin and Manager only), `/usage`; voice summaries (today, past hour, cameras 6, 7 and 8), "who is on duty", "show cameras 3, 4 and 12"; Rumik Silk voice (`/assistant/speak`, `python -m tools.check_rumik`). Live check: a camera added by API started its worker, came online at 8.3 analysed fps, streamed, and stopped with the API. pytest: 200 passed (the real wake-word model test needs tflite, which this sandbox's Python cannot install).
+- Done (26 Oct, P25 part 1): calls depend on who is on the software (away = at once, on screen = 5 s grace, acknowledging cancels the call); "Demo alert" button with a live timeline panel; Live page alerts once per incident (it beeped on every update). Browser test: Ravi called at 0 s, Anita and Vikram at 5 s; Anita acknowledging at 2 s cancelled her call; panel opens in about 0.2 s. pytest: 210 passed.
 - Next (Kirito): fill `.env` (Twilio, WhatsApp, Groq, Ollama, phones, fire station, site address), port Bhoomi's WhatsApp format if different, choose PPE/fire models, real SOPs in `knowledge/`, sign off contract P1-P18, then the full testing checklist on the laptop.
 - Blockers: needs Kirito's keys and decisions above. Offline speech model download (Hugging Face) could not be tested in the sandbox. Not tested with a real webcam or phone camera.

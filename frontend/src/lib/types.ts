@@ -99,6 +99,8 @@ export type TimelineAction =
   | 'alert_all'
   | 'command'
   | 'note_added'
+  | 'duty_fallback'
+  | 'call_skipped_on_screen'
   | string
 
 /* ── Timeline event ────────────────────────────────────── */
