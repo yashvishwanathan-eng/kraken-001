@@ -112,4 +112,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (ValueError, FileNotFoundError) as exc:  # no trained model yet, wrong WAKE_MODEL: one clear line
+        raise SystemExit(f"Friday's listener cannot start: {exc}") from None
