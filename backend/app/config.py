@@ -125,6 +125,10 @@ class Settings(BaseSettings):
     ollama_timeout_s: float = 10.0
     ollama_default_model: str = "llama3.2:3b"
     whisper_offline_model: str = "small"
+    stt_language: str = "en"  # Whisper guesses the language from a short clip and can pick a wrong one; empty = guess
+    # words Whisper should expect (it spells names and commands right more often)
+    stt_prompt: str = ("Friday, RingGuard. Status report. Summary for today, the past hour. Cameras 1, 2 and 3. "
+                       "Who is on duty? Alert everybody. Acknowledge incident. Call Yash. Call Harini.")
     assistant_confirm_ttl_s: int = 60
     assistant_max_rows: int = 50
     knowledge_dir: str = "knowledge"

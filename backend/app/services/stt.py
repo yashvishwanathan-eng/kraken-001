@@ -27,11 +27,20 @@ class SttUnavailable(Exception):
     pass
 
 
+def _groq_fields(s) -> dict[str, str]:
+    fields = {"model": s.groq_stt_model, "response_format": "json"}
+    if s.stt_language:
+        fields["language"] = s.stt_language
+    if s.stt_prompt:
+        fields["prompt"] = s.stt_prompt
+    return fields
+
+
 def _groq(data: bytes, filename: str, content_type: str) -> str:
     s = get_settings()
     response = httpx.post(GROQ_STT_URL, headers={"Authorization": f"Bearer {s.groq_api_key}"},
                           files={"file": (filename, data, content_type)},
-                          data={"model": s.groq_stt_model, "response_format": "json"}, timeout=GROQ_STT_TIMEOUT_S)
+                          data=_groq_fields(s), timeout=GROQ_STT_TIMEOUT_S)
     response.raise_for_status()
     return response.json()["text"].strip()
 
@@ -51,7 +60,9 @@ def _local(data: bytes, filename: str) -> str:
             tmp.write(data)
             path = tmp.name
         try:
-            segments, _ = _local_model.transcribe(path, vad_filter=True)
+            s = get_settings()
+            segments, _ = _local_model.transcribe(path, vad_filter=True, language=s.stt_language or None,
+                                                  initial_prompt=s.stt_prompt or None)
             return " ".join(segment.text.strip() for segment in segments).strip()
         finally:
             Path(path).unlink(missing_ok=True)

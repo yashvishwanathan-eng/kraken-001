@@ -254,3 +254,13 @@ def test_voice_rejects_non_audio_and_reports_missing_stt(roster, monkeypatch):
     monkeypatch.setattr("app.routers.assistant.transcribe", unavailable)
     assert client.post("/assistant/voice", files={"audio": ("q.webm", b"x", "audio/webm")},
                        headers=headers).status_code == 503
+
+
+def test_speech_to_text_is_told_the_language_and_our_words(monkeypatch):
+    from app.config import get_settings
+    from app.services import stt
+
+    fields = stt._groq_fields(get_settings())
+    assert fields["language"] == "en" and "Friday" in fields["prompt"]
+    monkeypatch.setattr(get_settings(), "stt_language", "")
+    assert "language" not in stt._groq_fields(get_settings())
