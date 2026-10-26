@@ -6,10 +6,9 @@ An on-premise system that watches CCTV cameras, turns detections into confirmed 
 Pitch: "Every factory has cameras nobody watches. Most AI adds a dashboard nobody watches. Ours picks up the phone."
 
 ## Team and boundaries
-- I (Kirito) build the full `backend/`: vision, rules engine, API, database, calls, AI assistant.
-- My teammate builds the full `frontend/` (React, built with Antigravity, brief in `frontend/BRIEF.md`). The frontend is combined with the backend last.
-- NEVER create, edit or delete anything in `frontend/`.
-- The API contract is `docs/CONTRACT.md`. It is the single source of truth, shared with the frontend. Never change it silently. If a change is needed, stop and tell me, so the teammate can update `frontend/BRIEF.md` (which points to the contract, not a copy).
+- I (Kirito) own the whole project: `backend/` (vision, rules engine, API, database, calls, AI assistant) and, since 26 Oct, `frontend/` too.
+- `frontend/` (React 19 + Vite + Tailwind + framer-motion, brief in `frontend/BRIEF.md`) was built by a teammate in the VIT-kraken repo (commit 6b3ad51) and moved here on 26 Oct. We now upgrade it ourselves; both halves live in this repo.
+- The API contract is `docs/CONTRACT.md`. It is the single source of truth for backend and frontend. Never change it silently: when an endpoint changes, update the contract, the backend and the frontend in the same change, and tell me.
 
 ## Working rules
 1. Before writing code, read the relevant existing files. Never guess field names, paths or endpoints. Check `docs/CONTRACT.md`.
@@ -66,6 +65,7 @@ backend/
   tests/               conftest.py points tests at a separate `<db>_test` database; tests/fixtures/ is a frozen copy of config/ so demo edits never break tests
   models/              model weights + OpenVINO exports (gitignored); workers use <name>_openvino_model/ when present
   media/               clips and snapshots (gitignored)
+frontend/              React dashboard (npm ci ; npm run dev on :5173; VITE_API_URL and VITE_USE_MOCKS in frontend/.env)
 docs/
   CONTRACT.md          API contract: endpoints, shapes, incident object, enums, auth rules
   GUIDE.md             start here: every topic from zero (simple, deeper, where, try it, check yourself) + first full run

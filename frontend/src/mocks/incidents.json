@@ -1,0 +1,698 @@
+[
+  {
+    "id": 101,
+    "type": "fire",
+    "severity": "critical",
+    "status": "acknowledged",
+    "camera_id": "cam-east-wing",
+    "camera_name": "East Wing, Loading Bay 2",
+    "zone": "loading-bay",
+    "started_at": "2026-10-24T04:42:41Z",
+    "confidence": 0.94,
+    "snapshot_url": "/media/101.jpg",
+    "clip_url": "/media/101.mp4",
+    "acknowledged_by": "Ravi Kumar",
+    "timeline": [
+      {
+        "at": "2026-10-24T04:42:44Z",
+        "action": "call_placed",
+        "to": "Ravi Kumar"
+      },
+      {
+        "at": "2026-10-24T04:42:58Z",
+        "action": "acknowledged",
+        "by": "Ravi Kumar",
+        "via": "keypad"
+      }
+    ]
+  },
+  {
+    "id": 102,
+    "type": "ppe",
+    "severity": "low",
+    "status": "open",
+    "camera_id": "cam-warehouse-a",
+    "camera_name": "Warehouse A, Racking Zone",
+    "zone": "racking-north",
+    "started_at": "2026-10-24T04:55:10Z",
+    "confidence": 0.88,
+    "snapshot_url": "/media/102.jpg",
+    "clip_url": "/media/102.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T04:55:13Z",
+        "action": "call_placed",
+        "to": "Anand Pillai"
+      }
+    ]
+  },
+  {
+    "id": 103,
+    "type": "access",
+    "severity": "high",
+    "status": "resolved",
+    "camera_id": "cam-south-gate",
+    "camera_name": "South Gate, Entry Point",
+    "zone": "restricted-entry",
+    "started_at": "2026-10-24T03:10:02Z",
+    "confidence": 0.97,
+    "snapshot_url": "/media/103.jpg",
+    "clip_url": "/media/103.mp4",
+    "acknowledged_by": "Suresh Nair",
+    "timeline": [
+      {
+        "at": "2026-10-24T03:10:05Z",
+        "action": "call_placed",
+        "to": "Suresh Nair"
+      },
+      {
+        "at": "2026-10-24T03:10:22Z",
+        "action": "acknowledged",
+        "by": "Suresh Nair",
+        "via": "voice"
+      },
+      {
+        "at": "2026-10-24T03:18:00Z",
+        "action": "resolved",
+        "by": "Suresh Nair",
+        "note": "Worker escorted out"
+      }
+    ]
+  },
+  {
+    "id": 104,
+    "type": "fall",
+    "severity": "critical",
+    "status": "resolved",
+    "camera_id": "cam-roof-level",
+    "camera_name": "Roof Level, HVAC Area",
+    "zone": "hvac-platform",
+    "started_at": "2026-10-23T11:30:00Z",
+    "confidence": 0.91,
+    "snapshot_url": "/media/104.jpg",
+    "clip_url": "/media/104.mp4",
+    "acknowledged_by": "Deepak Rao",
+    "timeline": [
+      {
+        "at": "2026-10-23T11:30:03Z",
+        "action": "call_placed",
+        "to": "Deepak Rao"
+      },
+      {
+        "at": "2026-10-23T11:30:18Z",
+        "action": "acknowledged",
+        "by": "Deepak Rao",
+        "via": "keypad"
+      },
+      {
+        "at": "2026-10-23T11:45:00Z",
+        "action": "resolved",
+        "by": "Deepak Rao",
+        "note": "Worker assisted, no serious injury"
+      }
+    ]
+  },
+  {
+    "id": 105,
+    "type": "loitering",
+    "severity": "low",
+    "status": "false_alarm",
+    "camera_id": "cam-south-gate",
+    "camera_name": "South Gate, Entry Point",
+    "zone": "parking-lot",
+    "started_at": "2026-10-23T09:15:22Z",
+    "confidence": 0.63,
+    "snapshot_url": "/media/105.jpg",
+    "clip_url": "/media/105.mp4",
+    "acknowledged_by": "Ravi Kumar",
+    "timeline": [
+      {
+        "at": "2026-10-23T09:15:25Z",
+        "action": "call_placed",
+        "to": "Ravi Kumar"
+      },
+      {
+        "at": "2026-10-23T09:15:55Z",
+        "action": "acknowledged",
+        "by": "Ravi Kumar",
+        "via": "web"
+      },
+      {
+        "at": "2026-10-23T09:20:00Z",
+        "action": "false_alarm",
+        "by": "Ravi Kumar",
+        "note": "Delivery person waiting"
+      }
+    ]
+  },
+  {
+    "id": 106,
+    "type": "unattended",
+    "severity": "high",
+    "status": "acknowledged",
+    "camera_id": "cam-east-wing",
+    "camera_name": "East Wing, Loading Bay 2",
+    "zone": "dispatch-area",
+    "started_at": "2026-10-24T05:08:45Z",
+    "confidence": 0.82,
+    "snapshot_url": "/media/106.jpg",
+    "clip_url": "/media/106.mp4",
+    "acknowledged_by": "Priya Menon",
+    "timeline": [
+      {
+        "at": "2026-10-24T05:08:50Z",
+        "action": "call_placed",
+        "to": "Priya Menon"
+      },
+      {
+        "at": "2026-10-24T05:09:14Z",
+        "action": "acknowledged",
+        "by": "Priya Menon",
+        "via": "keypad"
+      }
+    ]
+  },
+  {
+    "id": 107,
+    "type": "crowding",
+    "severity": "high",
+    "status": "open",
+    "camera_id": "cam-warehouse-a",
+    "camera_name": "Warehouse A, Racking Zone",
+    "zone": "loading-floor",
+    "started_at": "2026-10-24T05:20:00Z",
+    "confidence": 0.85,
+    "snapshot_url": "/media/107.jpg",
+    "clip_url": "/media/107.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T05:20:04Z",
+        "action": "call_placed",
+        "to": "Anand Pillai"
+      }
+    ]
+  },
+  {
+    "id": 108,
+    "type": "ppe",
+    "severity": "low",
+    "status": "resolved",
+    "camera_id": "cam-roof-level",
+    "camera_name": "Roof Level, HVAC Area",
+    "zone": "rooftop-walkway",
+    "started_at": "2026-10-23T14:00:10Z",
+    "confidence": 0.9,
+    "snapshot_url": "/media/108.jpg",
+    "clip_url": "/media/108.mp4",
+    "acknowledged_by": "Deepak Rao",
+    "timeline": [
+      {
+        "at": "2026-10-23T14:00:15Z",
+        "action": "call_placed",
+        "to": "Deepak Rao"
+      },
+      {
+        "at": "2026-10-23T14:00:40Z",
+        "action": "acknowledged",
+        "by": "Deepak Rao",
+        "via": "voice"
+      },
+      {
+        "at": "2026-10-23T14:12:00Z",
+        "action": "resolved",
+        "by": "Deepak Rao",
+        "note": "Worker given helmet on site"
+      }
+    ]
+  },
+  {
+    "id": 109,
+    "type": "access",
+    "severity": "high",
+    "status": "open",
+    "camera_id": "cam-south-gate",
+    "camera_name": "South Gate, Entry Point",
+    "zone": "server-room-corridor",
+    "started_at": "2026-10-24T05:31:00Z",
+    "confidence": 0.79,
+    "snapshot_url": "/media/109.jpg",
+    "clip_url": "/media/109.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T05:31:04Z",
+        "action": "call_placed",
+        "to": "Suresh Nair"
+      }
+    ]
+  },
+  {
+    "id": 110,
+    "type": "fire",
+    "severity": "critical",
+    "status": "resolved",
+    "camera_id": "cam-warehouse-a",
+    "camera_name": "Warehouse A, Racking Zone",
+    "zone": "chemical-storage",
+    "started_at": "2026-10-22T21:05:33Z",
+    "confidence": 0.98,
+    "snapshot_url": "/media/110.jpg",
+    "clip_url": "/media/110.mp4",
+    "acknowledged_by": "Ravi Kumar",
+    "timeline": [
+      {
+        "at": "2026-10-22T21:05:37Z",
+        "action": "call_placed",
+        "to": "Ravi Kumar"
+      },
+      {
+        "at": "2026-10-22T21:05:48Z",
+        "action": "call_escalated",
+        "to": "Anand Pillai"
+      },
+      {
+        "at": "2026-10-22T21:06:02Z",
+        "action": "acknowledged",
+        "by": "Anand Pillai",
+        "via": "voice"
+      },
+      {
+        "at": "2026-10-22T21:22:00Z",
+        "action": "resolved",
+        "by": "Anand Pillai",
+        "note": "Contained by fire suppression system"
+      }
+    ]
+  },
+  {
+    "id": 111,
+    "type": "loitering",
+    "severity": "low",
+    "status": "open",
+    "camera_id": "cam-east-wing",
+    "camera_name": "East Wing, Loading Bay 2",
+    "zone": "bay-perimeter",
+    "started_at": "2026-10-24T05:45:00Z",
+    "confidence": 0.71,
+    "snapshot_url": "/media/111.jpg",
+    "clip_url": "/media/111.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T05:45:05Z",
+        "action": "call_placed",
+        "to": "Priya Menon"
+      }
+    ]
+  },
+  {
+    "id": 112,
+    "type": "fall",
+    "severity": "critical",
+    "status": "open",
+    "camera_id": "cam-east-wing",
+    "camera_name": "East Wing, Loading Bay 2",
+    "zone": "mezzanine-level",
+    "started_at": "2026-10-24T05:55:10Z",
+    "confidence": 0.93,
+    "snapshot_url": "/media/112.jpg",
+    "clip_url": "/media/112.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T05:55:14Z",
+        "action": "call_placed",
+        "to": "Ravi Kumar"
+      },
+      {
+        "at": "2026-10-24T05:55:50Z",
+        "action": "call_escalated",
+        "to": "Priya Menon"
+      }
+    ]
+  },
+  {
+    "id": 113,
+    "type": "unattended",
+    "severity": "high",
+    "status": "false_alarm",
+    "camera_id": "cam-warehouse-a",
+    "camera_name": "Warehouse A, Racking Zone",
+    "zone": "racking-south",
+    "started_at": "2026-10-23T16:20:00Z",
+    "confidence": 0.55,
+    "snapshot_url": "/media/113.jpg",
+    "clip_url": "/media/113.mp4",
+    "acknowledged_by": "Suresh Nair",
+    "timeline": [
+      {
+        "at": "2026-10-23T16:20:05Z",
+        "action": "call_placed",
+        "to": "Suresh Nair"
+      },
+      {
+        "at": "2026-10-23T16:20:30Z",
+        "action": "acknowledged",
+        "by": "Suresh Nair",
+        "via": "web"
+      },
+      {
+        "at": "2026-10-23T16:25:00Z",
+        "action": "false_alarm",
+        "by": "Suresh Nair",
+        "note": "Tool placed for maintenance"
+      }
+    ]
+  },
+  {
+    "id": 114,
+    "type": "crowding",
+    "severity": "high",
+    "status": "resolved",
+    "camera_id": "cam-south-gate",
+    "camera_name": "South Gate, Entry Point",
+    "zone": "shift-change-area",
+    "started_at": "2026-10-23T07:01:00Z",
+    "confidence": 0.76,
+    "snapshot_url": "/media/114.jpg",
+    "clip_url": "/media/114.mp4",
+    "acknowledged_by": "Deepak Rao",
+    "timeline": [
+      {
+        "at": "2026-10-23T07:01:05Z",
+        "action": "call_placed",
+        "to": "Deepak Rao"
+      },
+      {
+        "at": "2026-10-23T07:01:30Z",
+        "action": "acknowledged",
+        "by": "Deepak Rao",
+        "via": "voice"
+      },
+      {
+        "at": "2026-10-23T07:15:00Z",
+        "action": "resolved",
+        "by": "Deepak Rao",
+        "note": "Shift handover complete, crowd dispersed"
+      }
+    ]
+  },
+  {
+    "id": 115,
+    "type": "ppe",
+    "severity": "low",
+    "status": "open",
+    "camera_id": "cam-east-wing",
+    "camera_name": "East Wing, Loading Bay 2",
+    "zone": "forklift-zone",
+    "started_at": "2026-10-24T06:05:22Z",
+    "confidence": 0.87,
+    "snapshot_url": "/media/115.jpg",
+    "clip_url": "/media/115.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T06:05:26Z",
+        "action": "call_placed",
+        "to": "Ravi Kumar"
+      }
+    ]
+  },
+  {
+    "id": 116,
+    "type": "access",
+    "severity": "high",
+    "status": "open",
+    "camera_id": "cam-roof-level",
+    "camera_name": "Roof Level, HVAC Area",
+    "zone": "restricted-rooftop",
+    "started_at": "2026-10-24T06:12:00Z",
+    "confidence": 0.95,
+    "snapshot_url": "/media/116.jpg",
+    "clip_url": "/media/116.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T06:12:04Z",
+        "action": "call_placed",
+        "to": "Deepak Rao"
+      },
+      {
+        "at": "2026-10-24T06:13:00Z",
+        "action": "call_escalated",
+        "to": "Anand Pillai"
+      }
+    ]
+  },
+  {
+    "id": 117,
+    "type": "fire",
+    "severity": "critical",
+    "status": "acknowledged",
+    "camera_id": "cam-south-gate",
+    "camera_name": "South Gate, Entry Point",
+    "zone": "generator-room",
+    "started_at": "2026-10-23T20:44:55Z",
+    "confidence": 0.8,
+    "snapshot_url": "/media/117.jpg",
+    "clip_url": "/media/117.mp4",
+    "acknowledged_by": "Suresh Nair",
+    "timeline": [
+      {
+        "at": "2026-10-23T20:44:58Z",
+        "action": "call_placed",
+        "to": "Suresh Nair"
+      },
+      {
+        "at": "2026-10-23T20:45:20Z",
+        "action": "acknowledged",
+        "by": "Suresh Nair",
+        "via": "keypad"
+      }
+    ]
+  },
+  {
+    "id": 118,
+    "type": "loitering",
+    "severity": "low",
+    "status": "open",
+    "camera_id": "cam-warehouse-a",
+    "camera_name": "Warehouse A, Racking Zone",
+    "zone": "emergency-exit-b",
+    "started_at": "2026-10-24T06:30:10Z",
+    "confidence": 0.74,
+    "snapshot_url": "/media/118.jpg",
+    "clip_url": "/media/118.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T06:30:15Z",
+        "action": "call_placed",
+        "to": "Anand Pillai"
+      }
+    ]
+  },
+  {
+    "id": 119,
+    "type": "fall",
+    "severity": "critical",
+    "status": "resolved",
+    "camera_id": "cam-warehouse-a",
+    "camera_name": "Warehouse A, Racking Zone",
+    "zone": "loading-floor",
+    "started_at": "2026-10-22T13:55:00Z",
+    "confidence": 0.83,
+    "snapshot_url": "/media/119.jpg",
+    "clip_url": "/media/119.mp4",
+    "acknowledged_by": "Priya Menon",
+    "timeline": [
+      {
+        "at": "2026-10-22T13:55:05Z",
+        "action": "call_placed",
+        "to": "Priya Menon"
+      },
+      {
+        "at": "2026-10-22T13:55:28Z",
+        "action": "acknowledged",
+        "by": "Priya Menon",
+        "via": "voice"
+      },
+      {
+        "at": "2026-10-22T14:10:00Z",
+        "action": "resolved",
+        "by": "Priya Menon",
+        "note": "Minor bruise, first aid given"
+      }
+    ]
+  },
+  {
+    "id": 120,
+    "type": "crowding",
+    "severity": "high",
+    "status": "acknowledged",
+    "camera_id": "cam-east-wing",
+    "camera_name": "East Wing, Loading Bay 2",
+    "zone": "docking-station",
+    "started_at": "2026-10-24T06:50:00Z",
+    "confidence": 0.89,
+    "snapshot_url": "/media/120.jpg",
+    "clip_url": "/media/120.mp4",
+    "acknowledged_by": "Ravi Kumar",
+    "timeline": [
+      {
+        "at": "2026-10-24T06:50:04Z",
+        "action": "call_placed",
+        "to": "Ravi Kumar"
+      },
+      {
+        "at": "2026-10-24T06:50:31Z",
+        "action": "acknowledged",
+        "by": "Ravi Kumar",
+        "via": "keypad"
+      }
+    ]
+  },
+  {
+    "id": 121,
+    "type": "unattended",
+    "severity": "high",
+    "status": "open",
+    "camera_id": "cam-south-gate",
+    "camera_name": "South Gate, Entry Point",
+    "zone": "security-checkpoint",
+    "started_at": "2026-10-24T07:02:00Z",
+    "confidence": 0.9,
+    "snapshot_url": "/media/121.jpg",
+    "clip_url": "/media/121.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T07:02:04Z",
+        "action": "call_placed",
+        "to": "Suresh Nair"
+      },
+      {
+        "at": "2026-10-24T07:03:00Z",
+        "action": "call_escalated",
+        "to": "Deepak Rao"
+      }
+    ]
+  },
+  {
+    "id": 122,
+    "type": "access",
+    "severity": "high",
+    "status": "resolved",
+    "camera_id": "cam-warehouse-a",
+    "camera_name": "Warehouse A, Racking Zone",
+    "zone": "admin-office-wing",
+    "started_at": "2026-10-21T08:20:00Z",
+    "confidence": 0.68,
+    "snapshot_url": "/media/122.jpg",
+    "clip_url": "/media/122.mp4",
+    "acknowledged_by": "Anand Pillai",
+    "timeline": [
+      {
+        "at": "2026-10-21T08:20:04Z",
+        "action": "call_placed",
+        "to": "Anand Pillai"
+      },
+      {
+        "at": "2026-10-21T08:20:33Z",
+        "action": "acknowledged",
+        "by": "Anand Pillai",
+        "via": "web"
+      },
+      {
+        "at": "2026-10-21T08:30:00Z",
+        "action": "resolved",
+        "by": "Anand Pillai",
+        "note": "Visitor with expired badge, issued pass"
+      }
+    ]
+  },
+  {
+    "id": 123,
+    "type": "ppe",
+    "severity": "low",
+    "status": "resolved",
+    "camera_id": "cam-roof-level",
+    "camera_name": "Roof Level, HVAC Area",
+    "zone": "maintenance-deck",
+    "started_at": "2026-10-21T10:05:00Z",
+    "confidence": 0.72,
+    "snapshot_url": "/media/123.jpg",
+    "clip_url": "/media/123.mp4",
+    "acknowledged_by": "Deepak Rao",
+    "timeline": [
+      {
+        "at": "2026-10-21T10:05:05Z",
+        "action": "call_placed",
+        "to": "Deepak Rao"
+      },
+      {
+        "at": "2026-10-21T10:05:35Z",
+        "action": "acknowledged",
+        "by": "Deepak Rao",
+        "via": "voice"
+      },
+      {
+        "at": "2026-10-21T10:12:00Z",
+        "action": "resolved",
+        "by": "Deepak Rao",
+        "note": "Worker equipped with gloves"
+      }
+    ]
+  },
+  {
+    "id": 124,
+    "type": "fire",
+    "severity": "critical",
+    "status": "open",
+    "camera_id": "cam-east-wing",
+    "camera_name": "East Wing, Loading Bay 2",
+    "zone": "compressor-room",
+    "started_at": "2026-10-24T07:15:00Z",
+    "confidence": 0.96,
+    "snapshot_url": "/media/124.jpg",
+    "clip_url": "/media/124.mp4",
+    "timeline": [
+      {
+        "at": "2026-10-24T07:15:04Z",
+        "action": "call_placed",
+        "to": "Ravi Kumar"
+      },
+      {
+        "at": "2026-10-24T07:16:00Z",
+        "action": "call_escalated",
+        "to": "Priya Menon"
+      }
+    ]
+  },
+  {
+    "id": 125,
+    "type": "crowding",
+    "severity": "high",
+    "status": "resolved",
+    "camera_id": "cam-south-gate",
+    "camera_name": "South Gate, Entry Point",
+    "zone": "canteen-access",
+    "started_at": "2026-10-23T12:00:00Z",
+    "confidence": 0.78,
+    "snapshot_url": "/media/125.jpg",
+    "clip_url": "/media/125.mp4",
+    "acknowledged_by": "Suresh Nair",
+    "timeline": [
+      {
+        "at": "2026-10-23T12:00:05Z",
+        "action": "call_placed",
+        "to": "Suresh Nair"
+      },
+      {
+        "at": "2026-10-23T12:00:28Z",
+        "action": "acknowledged",
+        "by": "Suresh Nair",
+        "via": "keypad"
+      },
+      {
+        "at": "2026-10-23T12:15:00Z",
+        "action": "resolved",
+        "by": "Suresh Nair",
+        "note": "Lunch crowd dispersed after staggered breaks"
+      }
+    ]
+  }
+]

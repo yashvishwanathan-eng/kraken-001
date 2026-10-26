@@ -1,0 +1,74 @@
+[
+  {
+    "id": "resp-001",
+    "name": "Ravi Kumar",
+    "phone": "+91-98400-11223",
+    "language": "Hindi",
+    "zone": "East Wing",
+    "shift_start": "06:00",
+    "shift_end": "14:00",
+    "shift": "morning",
+    "call_order": 1,
+    "active": true
+  },
+  {
+    "id": "resp-002",
+    "name": "Anand Pillai",
+    "phone": "+91-99401-22334",
+    "language": "Tamil",
+    "zone": "Warehouse A",
+    "shift_start": "06:00",
+    "shift_end": "14:00",
+    "shift": "morning",
+    "call_order": 2,
+    "active": true
+  },
+  {
+    "id": "resp-003",
+    "name": "Suresh Nair",
+    "phone": "+91-97402-33445",
+    "language": "Malayalam",
+    "zone": "South Gate",
+    "shift_start": "14:00",
+    "shift_end": "22:00",
+    "shift": "afternoon",
+    "call_order": 1,
+    "active": true
+  },
+  {
+    "id": "resp-004",
+    "name": "Deepak Rao",
+    "phone": "+91-96403-44556",
+    "language": "Kannada",
+    "zone": "Roof Level",
+    "shift_start": "14:00",
+    "shift_end": "22:00",
+    "shift": "afternoon",
+    "call_order": 2,
+    "active": true
+  },
+  {
+    "id": "resp-005",
+    "name": "Priya Menon",
+    "phone": "+91-95404-55667",
+    "language": "Tamil",
+    "zone": "East Wing",
+    "shift_start": "22:00",
+    "shift_end": "06:00",
+    "shift": "night",
+    "call_order": 1,
+    "active": true
+  },
+  {
+    "id": "resp-006",
+    "name": "Mohammed Ismail",
+    "phone": "+91-94405-66778",
+    "language": "English",
+    "zone": "South Gate",
+    "shift_start": "22:00",
+    "shift_end": "06:00",
+    "shift": "night",
+    "call_order": 2,
+    "active": false
+  }
+]

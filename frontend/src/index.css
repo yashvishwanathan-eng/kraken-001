@@ -1,0 +1,318 @@
+@import "tailwindcss";
+
+/* ============================================================
+   DESIGN TOKENS — Pro Dark Bento Design System
+   Solid near-black on #000, 1px border at rgba(255,255,255,0.08).
+   Card radius 20px. Monospace for numbers, times, percentages.
+   ============================================================ */
+
+@layer base {
+  :root {
+    /* ── Background layers ── */
+    --bg: #000000;
+    --surface: #0b0b0c;
+    --surface-raised: #111113;
+    --surface-hover: #161619;
+
+    /* ── Borders & Hairlines ── */
+    --border: rgba(255, 255, 255, 0.08);
+    --border-subtle: rgba(255, 255, 255, 0.05);
+    --hair: rgba(255, 255, 255, 0.08);
+
+    /* ── Text ── */
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.56);
+    --text-muted: rgba(255, 255, 255, 0.38);
+
+    /* ── Functional Severity Colours (Only these get colour) ── */
+    --critical: #f43f5e;
+    --critical-subtle: rgba(244, 63, 94, 0.12);
+    --high: #f59e0b;
+    --high-subtle: rgba(245, 158, 11, 0.12);
+    --low: #3b82f6;
+    --low-subtle: rgba(59, 130, 246, 0.12);
+    --resolved: #10b981;
+    --resolved-subtle: rgba(16, 185, 129, 0.12);
+    --neutral: #6b7280;
+    --neutral-subtle: rgba(107, 114, 128, 0.12);
+
+    /* ── Status ── */
+    --online: #10b981;
+    --offline: #f43f5e;
+
+    /* ── Brand accent (Clean white / subtle surface) ── */
+    --accent: #ffffff;
+    --accent-hover: #e5e5e5;
+    --accent-subtle: rgba(255, 255, 255, 0.08);
+
+    /* ── Radius & Spacing ── */
+    --radius: 20px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 20px;
+    --radius-pill: 14px;
+  }
+}
+
+/* ============================================================
+   GLOBAL BASE STYLES
+   ============================================================ */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family:
+      "Geist",
+      "Inter",
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      sans-serif;
+    background-color: #000000;
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background-color: #000000;
+  }
+
+  /* Monospace font utility for numbers, dates, codes */
+  .font-mono,
+  .mono,
+  .tabular {
+    font-family:
+      "Geist Mono",
+      "JetBrains Mono",
+      ui-monospace,
+      SFMono-Regular,
+      Menlo,
+      Monaco,
+      Consolas,
+      monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #000000;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
+
+  /* Clean focus rings */
+  :focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.4);
+    outline-offset: 2px;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+}
+
+/* ============================================================
+   TAILWIND THEME EXTENSION
+   ============================================================ */
+
+@theme {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-hair: var(--hair);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-critical: var(--critical);
+  --color-high: var(--high);
+  --color-low: var(--low);
+  --color-resolved: var(--resolved);
+  --color-neutral: var(--neutral);
+  --color-online: var(--online);
+  --color-offline: var(--offline);
+
+  --font-family-sans: "Geist", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-family-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
+
+  --border-radius-DEFAULT: 20px;
+  --border-radius-sm: 8px;
+  --border-radius-md: 12px;
+  --border-radius-lg: 20px;
+}
+
+/* ============================================================
+   BENTO GRID & COMPONENT UTILITIES
+   ============================================================ */
+
+@layer components {
+  /* 12-column Bento Grid with 14px gaps */
+  .bento-grid {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 14px;
+  }
+
+  /* Card: solid near-black (#0b0b0c) on #000, 1px border at rgba(255,255,255,0.08), radius 20px */
+  .card {
+    background-color: #0b0b0c;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    position: relative;
+  }
+
+  .card-raised {
+    background-color: #111113;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    position: relative;
+  }
+
+  /* Segmented pill group: white background on selected item */
+  .seg {
+    display: inline-flex;
+    padding: 3px;
+    gap: 2px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .seg button,
+  .seg-btn {
+    border: 0;
+    height: 28px;
+    min-width: 44px;
+    padding: 0 12px;
+    border-radius: 11px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 12.5px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .seg button[aria-pressed="true"],
+  .seg button.active,
+  .seg-btn[aria-pressed="true"],
+  .seg-btn.active {
+    background: #ffffff;
+    color: #0b0b0c;
+    font-weight: 600;
+  }
+
+  .seg button:hover:not([aria-pressed="true"]):not(.active) {
+    color: #ffffff;
+  }
+
+  /* Stat numbers: large, light weight (200-300), tabular */
+  .stat-num {
+    font-size: 38px;
+    font-weight: 200;
+    letter-spacing: -0.04em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    font-family: "Geist Mono", "JetBrains Mono", monospace;
+  }
+
+  /* Stat labels: small, uppercase above or below number */
+  .stat-cap {
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+
+  /* Hairline divider between list rows */
+  .hairline-b {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .hairline-t {
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* Thin tick-mark progress bar */
+  .tick-track {
+    display: flex;
+    gap: 3px;
+    align-items: center;
+    width: 100%;
+  }
+
+  .tick-mark {
+    flex: 1;
+    height: 8px;
+    border-radius: 1px;
+    background: rgba(255, 255, 255, 0.12);
+    transition: background 0.2s;
+  }
+
+  .tick-mark.active {
+    background: #ffffff;
+  }
+
+  /* Clean pulse for critical alerts without blurry glows */
+  @keyframes border-pulse-critical {
+    0%,
+    100% {
+      border-color: rgba(244, 63, 94, 0.3);
+    }
+    50% {
+      border-color: #f43f5e;
+    }
+  }
+
+  .pulse-critical {
+    animation: border-pulse-critical 1.5s ease-in-out infinite;
+  }
+
+  /* Skeleton shimmer: subtle dark sweep */
+  @keyframes shimmer-dark {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      #0b0b0c 25%,
+      rgba(255, 255, 255, 0.05) 50%,
+      #0b0b0c 75%
+    );
+    background-size: 200% 100%;
+    animation: shimmer-dark 1.5s infinite;
+    border-radius: 8px;
+  }
+}

@@ -1,0 +1,172 @@
+[
+  {
+    "id": "cam-east-wing",
+    "name": "East Wing, Loading Bay 2",
+    "location": "East Wing",
+    "stream_url": "http://localhost:8000/stream/cam-east-wing",
+    "snapshot_url": "/media/snap-cam-east-wing.jpg",
+    "online": true,
+    "fps": 24,
+    "zones": [
+      {
+        "id": "zone-loading-bay",
+        "name": "Loading Bay",
+        "kind": "work",
+        "color": "#f43f5e",
+        "polygon": [
+          [0.05, 0.55],
+          [0.45, 0.55],
+          [0.45, 0.95],
+          [0.05, 0.95]
+        ],
+        "points": [
+          { "x": 0.05, "y": 0.55 },
+          { "x": 0.45, "y": 0.55 },
+          { "x": 0.45, "y": 0.95 },
+          { "x": 0.05, "y": 0.95 }
+        ]
+      },
+      {
+        "id": "zone-forklift",
+        "name": "Forklift Zone",
+        "kind": "restricted",
+        "color": "#f59e0b",
+        "polygon": [
+          [0.50, 0.50],
+          [0.90, 0.50],
+          [0.90, 0.90],
+          [0.50, 0.90]
+        ],
+        "points": [
+          { "x": 0.50, "y": 0.50 },
+          { "x": 0.90, "y": 0.50 },
+          { "x": 0.90, "y": 0.90 },
+          { "x": 0.50, "y": 0.90 }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cam-south-gate",
+    "name": "South Gate, Entry Point",
+    "location": "South Gate",
+    "stream_url": "http://localhost:8000/stream/cam-south-gate",
+    "snapshot_url": "/media/snap-cam-south-gate.jpg",
+    "online": true,
+    "fps": 20,
+    "zones": [
+      {
+        "id": "zone-restricted-entry",
+        "name": "Restricted Entry",
+        "kind": "restricted",
+        "color": "#f43f5e",
+        "polygon": [
+          [0.30, 0.20],
+          [0.70, 0.20],
+          [0.70, 0.60],
+          [0.30, 0.60]
+        ],
+        "points": [
+          { "x": 0.30, "y": 0.20 },
+          { "x": 0.70, "y": 0.20 },
+          { "x": 0.70, "y": 0.60 },
+          { "x": 0.30, "y": 0.60 }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cam-warehouse-a",
+    "name": "Warehouse A, Racking Zone",
+    "location": "Warehouse A",
+    "stream_url": "http://localhost:8000/stream/cam-warehouse-a",
+    "snapshot_url": "/media/snap-cam-warehouse-a.jpg",
+    "online": true,
+    "fps": 18,
+    "zones": [
+      {
+        "id": "zone-racking-north",
+        "name": "Racking North",
+        "kind": "ppe",
+        "color": "#3b82f6",
+        "polygon": [
+          [0.05, 0.05],
+          [0.50, 0.05],
+          [0.50, 0.50],
+          [0.05, 0.50]
+        ],
+        "points": [
+          { "x": 0.05, "y": 0.05 },
+          { "x": 0.50, "y": 0.05 },
+          { "x": 0.50, "y": 0.50 },
+          { "x": 0.05, "y": 0.50 }
+        ]
+      },
+      {
+        "id": "zone-chemical-storage",
+        "name": "Chemical Storage",
+        "kind": "restricted",
+        "color": "#f43f5e",
+        "polygon": [
+          [0.55, 0.55],
+          [0.95, 0.55],
+          [0.95, 0.95],
+          [0.55, 0.95]
+        ],
+        "points": [
+          { "x": 0.55, "y": 0.55 },
+          { "x": 0.95, "y": 0.55 },
+          { "x": 0.95, "y": 0.95 },
+          { "x": 0.55, "y": 0.95 }
+        ]
+      }
+    ]
+  },
+  {
+    "id": "cam-roof-level",
+    "name": "Roof Level, HVAC Area",
+    "location": "Roof Level",
+    "stream_url": "http://localhost:8000/stream/cam-roof-level",
+    "snapshot_url": "/media/snap-cam-roof-level.jpg",
+    "online": false,
+    "fps": 0,
+    "zones": [
+      {
+        "id": "zone-hvac-platform",
+        "name": "HVAC Platform",
+        "kind": "work",
+        "color": "#f59e0b",
+        "polygon": [
+          [0.10, 0.10],
+          [0.90, 0.10],
+          [0.90, 0.50],
+          [0.10, 0.50]
+        ],
+        "points": [
+          { "x": 0.10, "y": 0.10 },
+          { "x": 0.90, "y": 0.10 },
+          { "x": 0.90, "y": 0.50 },
+          { "x": 0.10, "y": 0.50 }
+        ]
+      },
+      {
+        "id": "zone-restricted-rooftop",
+        "name": "Restricted Rooftop",
+        "kind": "restricted",
+        "color": "#f43f5e",
+        "polygon": [
+          [0.10, 0.55],
+          [0.90, 0.55],
+          [0.90, 0.95],
+          [0.10, 0.95]
+        ],
+        "points": [
+          { "x": 0.10, "y": 0.55 },
+          { "x": 0.90, "y": 0.55 },
+          { "x": 0.90, "y": 0.95 },
+          { "x": 0.10, "y": 0.95 }
+        ]
+      }
+    ]
+  }
+]

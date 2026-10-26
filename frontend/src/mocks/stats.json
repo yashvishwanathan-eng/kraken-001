@@ -1,0 +1,26 @@
+{
+  "by_type": {
+    "fire": 4,
+    "ppe": 5,
+    "access": 4,
+    "fall": 3,
+    "unattended": 3,
+    "loitering": 3,
+    "crowding": 3
+  },
+  "by_day": [
+    { "date": "2026-10-18", "count": 2 },
+    { "date": "2026-10-19", "count": 4 },
+    { "date": "2026-10-20", "count": 3 },
+    { "date": "2026-10-21", "count": 5 },
+    { "date": "2026-10-22", "count": 6 },
+    { "date": "2026-10-23", "count": 8 },
+    { "date": "2026-10-24", "count": 12 }
+  ],
+  "open": 8,
+  "resolved": 17,
+  "avg_response_s": 94,
+  "open_count": 8,
+  "resolved_count": 17,
+  "avg_response_seconds": 94
+}
