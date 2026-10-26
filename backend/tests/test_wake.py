@@ -109,3 +109,15 @@ def test_a_relative_model_path_is_inside_backend(monkeypatch, tmp_path):
     (tmp_path / "models" / "hey_friday.onnx").write_bytes(b"onnx")
     monkeypatch.setattr(wake, "BACKEND_DIR", tmp_path)
     assert wake.resolve_model("models/hey_friday.onnx") == str(tmp_path / "models" / "hey_friday.onnx")
+
+
+def test_debug_meter_prints_once_a_second_and_flags_a_silent_microphone():
+    from voice.wake import DebugMeter
+
+    meter = DebugMeter()
+    quiet = np.zeros(CHUNK_SAMPLES, dtype=np.int16)
+    lines = [meter.feed(quiet, 0.05, 0.5) for _ in range(12)]
+    assert lines[:11] == [None] * 11 and "too quiet" in lines[11] and "wake score 0.05" in lines[11]
+    loud = (np.ones(CHUNK_SAMPLES) * 3000).astype(np.int16)
+    line = [meter.feed(loud, 0.7, 0.5) for _ in range(12)][-1]
+    assert "too quiet" not in line and "wake score 0.70" in line

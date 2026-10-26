@@ -4,6 +4,7 @@
   python -m voice.run_listener                    listen with the settings in .env
   python -m voice.run_listener --device 2 --threshold 0.6
   python -m voice.run_listener --ack-only         only play "Yes, boss" (the old Step 1 test)
+  python -m voice.run_listener --debug            print mic level and wake score every second (nothing heard?)
 
 On "Hey Friday" it answers "Yes, boss", opens Friday's page in the browser when the software is not open,
 records your order until you stop talking, and Friday answers (on the open dashboard, or on this speaker).
@@ -42,6 +43,7 @@ def main() -> None:
     parser.add_argument("--device", help="microphone number or name (see --list-devices)")
     parser.add_argument("--threshold", type=float, help="0 to 1; higher is stricter (default from .env)")
     parser.add_argument("--ack-only", action="store_true", help='only answer "Yes, boss" (no recording)')
+    parser.add_argument("--debug", action="store_true", help="print microphone level and wake score every second")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -51,7 +53,7 @@ def main() -> None:
     listener = WakeListener(threshold=args.threshold, device=args.device)
     s = get_settings()
     if args.ack_only:
-        listener.run()
+        listener.run(debug=args.debug)
         return
     if not s.internal_key or not s.friday_user:
         log.error("set INTERNAL_KEY and FRIDAY_USER in .env (or run with --ack-only)")
@@ -70,7 +72,7 @@ def main() -> None:
         except Exception:  # the API is down or slow: say so in the log and keep listening
             log.exception("Friday could not finish this turn; listening again")
 
-    listener.run(on_trigger=on_wake)
+    listener.run(on_trigger=on_wake, debug=args.debug)
 
 
 if __name__ == "__main__":

@@ -99,6 +99,28 @@ def resolve_model(model: str) -> str:
     return str(path)
 
 
+class DebugMeter:
+    """For --debug: one line per second with the microphone level and the best wake-word score."""
+
+    def __init__(self, every: int = 12) -> None:  # 12 chunks of 80 ms = about 1 s
+        self.every, self.n, self.loudest, self.best = every, 0, 0.0, 0.0
+
+    def feed(self, chunk, score: float, threshold: float) -> str | None:
+        import numpy as np
+
+        self.n += 1
+        self.loudest = max(self.loudest, float(np.sqrt(np.mean(np.asarray(chunk, dtype=np.float64) ** 2))))
+        self.best = max(self.best, score)
+        if self.n < self.every:
+            return None
+        level = min(30, int(self.loudest / 300))
+        hint = "  <- too quiet: wrong microphone?" if self.loudest < 150 else ""
+        line = (f"mic {'#' * level:<30} {self.loudest:6.0f}   wake score {self.best:.2f} "
+                f"(needs {threshold:.2f}){hint}")
+        self.n, self.loudest, self.best = 0, 0.0, 0.0
+        return line
+
+
 class WakeListener:
     def __init__(self, *, threshold: float | None = None, device: int | str | None = None,
                  ack_sound: Path | None = None) -> None:
@@ -111,10 +133,11 @@ class WakeListener:
         if self.ack_samples is None:
             log.warning("ack sound not found at %s: the listener will trigger without playing it", self.ack_path)
 
-    def run(self, on_trigger=None) -> None:
+    def run(self, on_trigger=None, debug: bool = False) -> None:
         """Listen until Ctrl+C. Each time the wake word is heard: play "Yes, boss", then call
         on_trigger(next_chunks), where next_chunks() yields the microphone audio that follows (the reply is
-        recorded from the same microphone). When on_trigger returns, listening for the wake word resumes."""
+        recorded from the same microphone). When on_trigger returns, listening for the wake word resumes.
+        debug=True prints, once a second, the microphone loudness and the best wake-word score heard."""
         import queue
 
         import numpy as np
@@ -134,10 +157,15 @@ class WakeListener:
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=CHUNK_SAMPLES,
                             device=self.device, callback=microphone):
             try:
+                meter = DebugMeter() if debug else None
                 while True:
                     chunk = chunks.get()
                     t0 = time.perf_counter()
                     score = best_score(model.predict(chunk))
+                    if meter:
+                        line = meter.feed(chunk, score, self.trigger.threshold)
+                        if line:
+                            print(line, flush=True)
                     if self.trigger.feed(score, time.monotonic()):
                         ms = (time.perf_counter() - t0) * 1000
                         log.info("wake word heard (score %.2f, %.1f ms)", score, ms)

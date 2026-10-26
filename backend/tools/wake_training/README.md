@@ -78,6 +78,8 @@ works, but it triggers less reliably.
    Say "Hey Friday" a few times at normal distance. Each time it should answer "Yes, boss" and print
    `wake word heard (score ...)`.
 4. Tune it:
+   - Nothing happens at all: run `python -m voice.run_listener --debug` and watch the `mic` bar while you talk.
+     No bar = wrong microphone (`--list-devices`, then set `WAKE_DEVICE`).
    - It misses you often: lower the threshold, `WAKE_THRESHOLD=0.4` (or `--threshold 0.4` to try quickly).
    - It wakes up when nobody said it (talking, TV, clapping): raise it, `WAKE_THRESHOLD=0.6`.
    - Still poor after tuning: train again with `n_samples = 5000` and `steps = 25000`.
