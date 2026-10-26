@@ -631,3 +631,7 @@ export async function raiseDemoIncident(type: DemoIncidentType, camera_id?: stri
   const incident = await post<Incident>('/demo/incident', { type, camera_id })
   return normalizeIncident(incident)
 }
+
+/* ── Raw helpers for the admin screens (lib/admin.ts) ───── */
+
+export const http = { get, post, put, del }

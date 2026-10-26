@@ -22,7 +22,7 @@ export function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate('/live', { replace: true })
+      navigate('/dashboard', { replace: true })
     }
   }, [isAuthenticated, navigate])
 
@@ -57,7 +57,7 @@ export function LoginPage() {
     try {
       setError(null)
       await login(pin)
-      navigate('/live', { replace: true })
+      navigate('/dashboard', { replace: true })
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Invalid PIN. Please try again.'
       if (msg.includes('401')) {

@@ -1,29 +1,29 @@
 /**
  * app/Layout.tsx
- * Pro dark bento app shell:
- * - Solid #000000 page with solid #0b0b0c surfaces and 1px borders at rgba(255,255,255,0.08).
- * - Monospace Geist Mono time and metrics.
- * - Meaningful status indicators only.
+ * App shell: the animated sidebar (beui.dev, see components/ui/animated-sidebar.tsx) with every screen in three
+ * groups, the emergency banner, the status bar (cameras, AI, DB, calls, Demo alert, clock, user) and the page.
+ * Screens a role cannot use are hidden from the sidebar (the API refuses them anyway).
  */
 
 import { useState, useEffect } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   LayoutGrid,
   AlertTriangle,
-  MessageSquare,
+  Sparkles,
   Users,
   MapPin,
-  BarChart3,
   Shield,
+  ShieldCheck,
   Video,
-  ChevronLeft,
-  ChevronRight,
+  Camera,
+  ScrollText,
   Database,
   Phone,
   Brain,
   LogOut,
+  PanelLeft,
   User as UserIcon,
   X,
 } from 'lucide-react'
@@ -33,22 +33,66 @@ import { nowIST } from '@/lib/time'
 import { useAuth } from '@/lib/auth'
 import { wsClient } from '@/lib/ws'
 import { DemoAlert } from '@/components/demo/DemoAlert'
+import { useMe } from '@/components/admin/kit'
+import {
+  AnimatedSidebar,
+  AnimatedSidebarContent,
+  AnimatedSidebarFooter,
+  AnimatedSidebarGroup,
+  AnimatedSidebarGroupContent,
+  AnimatedSidebarGroupLabel,
+  AnimatedSidebarHeader,
+  AnimatedSidebarInset,
+  AnimatedSidebarMenu,
+  AnimatedSidebarMenuButton,
+  AnimatedSidebarMenuItem,
+  AnimatedSidebarProvider,
+  AnimatedSidebarRail,
+  AnimatedSidebarTrigger,
+} from '@/components/ui/animated-sidebar'
 import type { AlertAllNotice } from '@/lib/types'
 
-const NAV = [
-  { to: '/live',       icon: Video,         label: 'Live Feed'   },
-  { to: '/incidents',  icon: AlertTriangle, label: 'Incidents'   },
-  { to: '/assistant',  icon: MessageSquare, label: 'Assistant'   },
-  { to: '/overview',   icon: BarChart3,     label: 'Overview'    },
-  { to: '/responders', icon: Users,         label: 'Responders'  },
-  { to: '/zones',      icon: MapPin,        label: 'Zones'       },
+interface NavItem {
+  to: string
+  icon: typeof Video
+  label: string
+  needs?: string[] // shown when the user holds any of these actions
+}
+
+const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
+  {
+    label: 'Monitor',
+    items: [
+      { to: '/dashboard', icon: LayoutGrid, label: 'Dashboard' },
+      { to: '/live', icon: Video, label: 'Live Feed' },
+      { to: '/incidents', icon: AlertTriangle, label: 'Incidents' },
+      { to: '/assistant', icon: Sparkles, label: 'Friday', needs: ['assistant'] },
+    ],
+  },
+  {
+    label: 'Team',
+    items: [
+      { to: '/people', icon: Users, label: 'People', needs: ['manage_users', 'delegate_cameras'] },
+      { to: '/duty', icon: ShieldCheck, label: 'Guards & duty' },
+    ],
+  },
+  {
+    label: 'System',
+    items: [
+      { to: '/cameras', icon: Camera, label: 'Cameras', needs: ['manage_cameras'] },
+      { to: '/zones', icon: MapPin, label: 'Zones', needs: ['manage_zones'] },
+      { to: '/logs', icon: ScrollText, label: 'Logs', needs: ['view_audit'] },
+    ],
+  },
 ]
 
 export function Layout() {
-  const [collapsed, setCollapsed] = useState(false)
   const [time, setTime] = useState(nowIST())
   const [alertNotice, setAlertNotice] = useState<AlertAllNotice | null>(null)
   const { user, logout } = useAuth()
+  const { me, can } = useMe()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
 
   // Tick the clock every second with guaranteed uppercase AM/PM
   useEffect(() => {
@@ -78,114 +122,94 @@ export function Layout() {
   const twilioOnline  = health?.twilio === 'ok' || health?.twilio === true
   const llmOnline     = health?.llm === 'ok' || health?.llm === 'ollama_only' || health?.llm === true
 
+  const visible = (item: NavItem) => !item.needs || !me || item.needs.some(can)
+
   return (
-    <div className="flex flex-col h-dvh overflow-hidden bg-black text-white">
-      {/* ── Emergency alert_all banner across top of app ──── */}
-      {alertNotice && (
-        <div
-          role="alert"
-          className="w-full bg-[#f43f5e] text-white px-4 py-2.5 flex items-center justify-between text-xs sm:text-sm font-semibold shadow-lg shrink-0 z-50 border-b border-[#f43f5e]"
-        >
-          <div className="flex items-center gap-2.5 overflow-hidden">
-            <AlertTriangle className="w-4 h-4 shrink-0 text-white" />
-            <span className="truncate">
-              EMERGENCY BROADCAST ALERT: {alertNotice.message}
-            </span>
-            {alertNotice.by && (
-              <span className="text-xs opacity-90 hidden md:inline font-mono font-normal">
-                (Initiated by {alertNotice.by})
-              </span>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setAlertNotice(null)}
-            className="ml-4 flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/30 hover:bg-black/50 text-white text-xs font-medium transition-colors shrink-0 cursor-pointer"
-            aria-label="Dismiss alert"
-          >
-            <X className="w-3.5 h-3.5" />
-            <span>Dismiss</span>
-          </button>
-        </div>
-      )}
-
-      <div className="flex flex-1 overflow-hidden min-h-0">
-        {/* ── Sidebar ─────────────────────────────────────────── */}
-        <aside
-          className="flex flex-col shrink-0 h-full border-r transition-all duration-200"
-          style={{
-            width: collapsed ? '60px' : '220px',
-            background: '#0b0b0c',
-            borderColor: 'rgba(255, 255, 255, 0.08)',
-          }}
-        >
-          {/* Logo */}
-          <div
-            className="flex items-center gap-3 px-4 py-4 border-b"
-            style={{ borderColor: 'rgba(255, 255, 255, 0.08)', minHeight: '60px' }}
-          >
-            <div className="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 bg-white/10 border border-white/10">
-              <Shield className="w-4 h-4 text-white" aria-hidden="true" />
+    <AnimatedSidebarProvider className="h-dvh min-h-0 overflow-hidden bg-black text-white">
+      <AnimatedSidebar ariaLabel={`${APP_NAME} navigation`} collapsible="icon" className="min-h-0" panelClassName="h-full bg-[#0b0b0c]">
+        <AnimatedSidebarHeader className="p-3 pb-2">
+          <div className="flex min-h-11 items-center gap-3 overflow-hidden px-2">
+            <div className="grid size-8 shrink-0 place-items-center rounded-[10px] border border-white/10 bg-white/10">
+              <Shield className="size-4 text-white" aria-hidden="true" />
             </div>
-            {!collapsed && (
-              <span className="font-semibold text-sm tracking-tight text-white truncate">
-                {APP_NAME}
-              </span>
-            )}
+            <span className="truncate text-sm font-semibold tracking-tight text-white group-data-[state=collapsed]/sidebar:hidden">
+              {APP_NAME}
+            </span>
           </div>
+        </AnimatedSidebarHeader>
 
-          {/* Nav */}
-          <nav className="flex-1 py-3 px-2 overflow-hidden space-y-1" aria-label="Main navigation">
-            {NAV.map(({ to, icon: Icon, label }) => (
-              <NavLink
-                key={to}
-                to={to}
-                title={collapsed ? label : undefined}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-[12px] text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-white ${
-                    isActive
-                      ? 'text-white bg-white/10'
-                      : 'text-[var(--text-secondary)] hover:text-white hover:bg-white/5'
-                  }`
-                }
-              >
-                {({ isActive }) => (
-                  <>
-                    <Icon
-                      className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : 'text-[var(--text-muted)]'}`}
-                      aria-hidden="true"
-                    />
-                    {!collapsed && <span className="truncate">{label}</span>}
-                  </>
-                )}
-              </NavLink>
-            ))}
-          </nav>
+        <AnimatedSidebarContent className="px-2 pt-1">
+          {NAV_GROUPS.map(group => {
+            const items = group.items.filter(visible)
+            if (items.length === 0) return null
+            return (
+              <AnimatedSidebarGroup key={group.label}>
+                <AnimatedSidebarGroupLabel>{group.label}</AnimatedSidebarGroupLabel>
+                <AnimatedSidebarGroupContent>
+                  <AnimatedSidebarMenu>
+                    {items.map(({ to, icon: Icon, label }) => (
+                      <AnimatedSidebarMenuItem key={to}>
+                        <AnimatedSidebarMenuButton
+                          icon={<Icon className="size-4" />}
+                          isActive={pathname === to || pathname.startsWith(`${to}/`)}
+                          onSelect={() => navigate(to)}
+                        >
+                          {label}
+                        </AnimatedSidebarMenuButton>
+                      </AnimatedSidebarMenuItem>
+                    ))}
+                  </AnimatedSidebarMenu>
+                </AnimatedSidebarGroupContent>
+              </AnimatedSidebarGroup>
+            )
+          })}
+        </AnimatedSidebarContent>
 
-          {/* Collapse toggle */}
+        <AnimatedSidebarFooter className="border-none p-3">
+          <div className="flex min-h-11 items-center gap-3 overflow-hidden rounded-xl p-1">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full text-xs font-semibold" style={{ background: 'oklch(0.89 0.2 128)', color: 'oklch(0.24 0.06 135)' }}>
+              {user?.name ? user.name.slice(0, 2).toUpperCase() : <UserIcon className="size-4" />}
+            </span>
+            <span className="min-w-0 flex-1 group-data-[state=collapsed]/sidebar:hidden">
+              <span className="block truncate text-sm font-medium text-white">{user?.name ?? 'User'}</span>
+              <span className="block truncate text-xs text-muted-foreground">{user?.role ?? ''}</span>
+            </span>
+          </div>
+        </AnimatedSidebarFooter>
+        <AnimatedSidebarRail />
+      </AnimatedSidebar>
+
+      <AnimatedSidebarInset className="h-dvh min-h-0 overflow-hidden bg-black">
+      {/* ── Emergency alert_all banner across top of app ──── */}
+        {alertNotice && (
           <div
-            className="p-3 border-t"
-            style={{ borderColor: 'rgba(255, 255, 255, 0.08)' }}
+            role="alert"
+            className="w-full bg-[#f43f5e] text-white px-4 py-2.5 flex items-center justify-between text-xs sm:text-sm font-semibold shadow-lg shrink-0 z-50 border-b border-[#f43f5e]"
           >
-            <button
-              onClick={() => setCollapsed(c => !c)}
-              className="flex items-center justify-center w-full py-1.5 rounded-[10px] text-xs text-[var(--text-muted)] hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
-              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            >
-              {collapsed ? (
-                <ChevronRight className="w-4 h-4" />
-              ) : (
-                <div className="flex items-center gap-2">
-                  <ChevronLeft className="w-4 h-4" />
-                  <span>Collapse</span>
-                </div>
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-white" />
+              <span className="truncate">
+                EMERGENCY BROADCAST ALERT: {alertNotice.message}
+              </span>
+              {alertNotice.by && (
+                <span className="text-xs opacity-90 hidden md:inline font-mono font-normal">
+                  (Initiated by {alertNotice.by})
+                </span>
               )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAlertNotice(null)}
+              className="ml-4 flex items-center gap-1 px-2.5 py-1 rounded-full bg-black/30 hover:bg-black/50 text-white text-xs font-medium transition-colors shrink-0 cursor-pointer"
+              aria-label="Dismiss alert"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Dismiss</span>
             </button>
           </div>
-        </aside>
+        )}
 
-        {/* ── Main column ─────────────────────────────────────── */}
-        <div className="flex flex-col flex-1 min-w-0 bg-black">
+        <div className="flex flex-col flex-1 min-w-0 min-h-0 bg-black">
           {/* Top bar */}
           <header
             className="flex items-center gap-4 px-5 border-b shrink-0"
@@ -195,6 +219,9 @@ export function Layout() {
               borderColor: 'rgba(255, 255, 255, 0.08)',
             }}
           >
+            <AnimatedSidebarTrigger className="-ml-2 text-muted-foreground transition-colors hover:bg-white/5 hover:text-white">
+              <PanelLeft aria-hidden="true" className="size-4" />
+            </AnimatedSidebarTrigger>
             {/* Status pills */}
             <div className="flex items-center gap-2.5 flex-1 overflow-hidden">
               {/* Cameras */}
@@ -290,8 +317,8 @@ export function Layout() {
             <Outlet />
           </main>
         </div>
-      </div>
-    </div>
+      </AnimatedSidebarInset>
+    </AnimatedSidebarProvider>
   )
 }
 

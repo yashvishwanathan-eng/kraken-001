@@ -10,9 +10,12 @@ import { LivePage }           from '@/pages/Live'
 import { IncidentsPage }      from '@/pages/Incidents'
 import { IncidentDetailPage }  from '@/pages/IncidentDetail'
 import { AssistantPage }      from '@/pages/Assistant'
-import { RespondersPage }     from '@/pages/Responders'
 import { ZonesPage }          from '@/pages/Zones'
-import { OverviewPage }       from '@/pages/Overview'
+import { DashboardPage }      from '@/pages/Dashboard'
+import { PeoplePage }         from '@/pages/People'
+import { CamerasPage }        from '@/pages/Cameras'
+import { DutyPage }           from '@/pages/Duty'
+import { LogsPage }           from '@/pages/Logs'
 import { useAuth }            from '@/lib/auth'
 
 function ProtectedLayout() {
@@ -28,15 +31,21 @@ export function Router() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<ProtectedLayout />}>
-        <Route index element={<Navigate to="/live" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="/dashboard"       element={<DashboardPage />} />
         <Route path="/live"            element={<LivePage />} />
         <Route path="/incidents"       element={<IncidentsPage />} />
         <Route path="/incidents/:id"   element={<IncidentDetailPage />} />
         <Route path="/assistant"       element={<AssistantPage />} />
-        <Route path="/overview"        element={<OverviewPage />} />
-        <Route path="/responders"      element={<RespondersPage />} />
+        <Route path="/people"          element={<PeoplePage />} />
+        <Route path="/duty"            element={<DutyPage />} />
+        <Route path="/cameras"         element={<CamerasPage />} />
         <Route path="/zones"           element={<ZonesPage />} />
-        <Route path="*"                element={<Navigate to="/live" replace />} />
+        <Route path="/logs"            element={<LogsPage />} />
+        {/* old addresses */}
+        <Route path="/overview"        element={<Navigate to="/dashboard" replace />} />
+        <Route path="/responders"      element={<Navigate to="/people" replace />} />
+        <Route path="*"                element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
   )

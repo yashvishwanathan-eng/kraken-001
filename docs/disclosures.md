@@ -64,3 +64,8 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - Rumik AI Silk text to speech (cloud API, Rumik's terms of service; HTTP format taken from Rumik's `pipecat-rumik` package, MIT): reads the assistant's replies aloud. Only the reply text is sent; never video.
 - IP Webcam by Pavel Khlebovich (free Android app, proprietary): turns the two demo phones into network cameras. Video goes only over our own hotspot to the event laptop.
 - ngrok (service): gives the laptop a public address so Twilio can reach the webhooks; only `/twilio/*` and `/share/*` answer through it.
+
+## Frontend UI components (in use, 26 Oct)
+- Animated sidebar from beui.dev (`beui.dev/components/motion/animated-sidebar`), pasted by Kirito; adapted to framer-motion, with our own `ease.ts` and `shared-layout-bg.tsx` helpers (the originals were not supplied). Licence: check beui.dev's terms before publishing.
+- Dashboard tile layout and animations adapted from a "Web3 bento" demo component pasted by Kirito (layout ideas only; all data and content are RingGuard's). Source and licence to confirm.
+- framer-motion (MIT), lucide-react (ISC), TanStack Query (MIT), React (MIT), Tailwind CSS (MIT): already used by the frontend.

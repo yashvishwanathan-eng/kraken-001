@@ -156,6 +156,15 @@
   --color-online: var(--online);
   --color-offline: var(--offline);
 
+  /* Names used by the pasted UI components (animated sidebar, bento tiles), mapped onto our dark theme */
+  --color-background: var(--bg);
+  --color-foreground: var(--text-primary);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text-primary);
+  --color-muted: var(--surface-hover);
+  --color-muted-foreground: var(--text-secondary);
+  --color-ring: rgba(255, 255, 255, 0.35);
+
   --font-family-sans: "Geist", "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-family-mono: "Geist Mono", "JetBrains Mono", ui-monospace, monospace;
 

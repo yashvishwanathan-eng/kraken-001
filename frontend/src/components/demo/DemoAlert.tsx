@@ -6,10 +6,11 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Siren, X, Flame, PersonStanding, DoorOpen, Check, Phone, MessageCircle, ArrowUpRight, Info } from 'lucide-react'
+import { Siren, X, Flame, PersonStanding, DoorOpen } from 'lucide-react'
+import { describe } from '@/lib/timeline'
 import { acknowledgeEvent, fetchCameras, fetchHealth, fetchMe, raiseDemoIncident, type DemoIncidentType } from '@/lib/api'
 import { wsClient } from '@/lib/ws'
-import type { Incident, TimelineEvent, WsEvent } from '@/lib/types'
+import type { Incident, WsEvent } from '@/lib/types'
 
 const TYPES: { type: DemoIncidentType; label: string; icon: typeof Flame }[] = [
   { type: 'fire', label: 'Fire', icon: Flame },
@@ -31,23 +32,6 @@ function incidentFrom(event: WsEvent): Incident | null {
 function newer(prev: Incident | null, next: Incident): Incident {
   if (!prev || prev.id !== next.id) return next
   return next.timeline.length >= prev.timeline.length ? next : prev
-}
-
-function describe(e: TimelineEvent): { text: string; icon: typeof Phone; tone: string } {
-  const who = e.to ?? e.by ?? ''
-  switch (e.action) {
-    case 'detected': return { text: 'Detected', icon: Siren, tone: 'var(--critical)' }
-    case 'call_placed': return { text: `Calling ${who}`, icon: Phone, tone: '#ffffff' }
-    case 'call_no_answer': return { text: `No answer from ${who}`, icon: Phone, tone: 'var(--high)' }
-    case 'whatsapp_sent': return { text: `WhatsApp to ${who}`, icon: MessageCircle, tone: '#ffffff' }
-    case 'escalated': return { text: `Escalating to ${who}`, icon: ArrowUpRight, tone: 'var(--high)' }
-    case 'call_skipped_on_screen': return { text: `${who} reacted on screen: call cancelled`, icon: Check, tone: 'var(--resolved)' }
-    case 'duty_fallback': return { text: `Nobody on duty: using the shift roster (${who})`, icon: Info, tone: 'var(--high)' }
-    case 'acknowledged': return { text: `Acknowledged by ${who}${e.via ? ` (${e.via})` : ''}`, icon: Check, tone: 'var(--resolved)' }
-    case 'resolved': return { text: `Resolved by ${who}`, icon: Check, tone: 'var(--resolved)' }
-    case 'false_alarm': return { text: `False alarm (${who})`, icon: Check, tone: 'var(--neutral)' }
-    default: return { text: `${e.action.replace(/_/g, ' ')}${who ? `: ${who}` : ''}`, icon: Info, tone: 'var(--text-secondary)' }
-  }
 }
 
 export function DemoAlert() {
