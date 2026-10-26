@@ -83,6 +83,7 @@ Status tags:
 | GET | /activity | live (P24) | Query: from, to (default last 24 h), user | `{from, to, users[], ai[], camera_views[]}` (view_audit: Admin and Manager) |
 | GET | /usage | live (P24) | | `{media_total_bytes, snapshots, clips, other_media, worker_logs, disk_free_bytes, disk_total_bytes, database_bytes, rows{}, incidents_by_day[], ai_queries_by_day[]}` (view_audit) |
 | POST | /demo/incident | live (P25) | `{type: incident type (default fire), camera_id?}` | 201 incident object. A real incident (dashboards + call ladder), audited as `demo_incident`. Needs `run_demo`. 404 for a camera you cannot see. |
+| POST | /assistant/voice-command | live (P25) | multipart `audio` | `{transcript, intent, status, answer, confirm_token, ms, data}`: Friday by voice. Silence gives status `unknown` and answer "Sorry, say that again." (200). 422 for non-audio, 503 without speech to text. Logged as `assistant_command` (channel voice). |
 | POST | /assistant/speak | live (P24) | `{text}` | `audio/wav` in the Rumik Silk voice; 503 if Rumik is not set up or does not answer |
 | GET | /stats | live | | `{by_type:{...}, by_day:[{date,count}], open, resolved, avg_response_s}` |
 | POST | /twilio/voice, /twilio/gather, /twilio/status | live | Twilio webhooks | Twilio only. TwiML responses. |

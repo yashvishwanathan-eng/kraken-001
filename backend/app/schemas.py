@@ -815,3 +815,7 @@ class SpeakIn(BaseModel):
 class DemoIncidentIn(BaseModel):
     type: IncidentType = "fire"
     camera_id: str | None = None  # default: your first camera
+
+
+class VoiceCommandOut(CommandOut):
+    transcript: str  # what Friday heard

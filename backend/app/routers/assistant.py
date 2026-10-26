@@ -16,7 +16,7 @@ from app.deps import require
 from app.models import User
 from app.schemas import (
     AssistantAnswer, AssistantQueryIn, AssistantVoiceAnswer, CommandIn, CommandOut, ConfirmIn, ConfirmOut, IncidentOut,
-    SpeakIn,
+    SpeakIn, VoiceCommandOut,
 )
 from app.services import commands, tts
 from app.services.assistant import ask
@@ -100,6 +100,45 @@ async def confirm(body: ConfirmIn, user: User = Depends(require("assistant"))) -
     await _push(result.notices)
     return ConfirmOut(status="done" if result.status == "done" else "refused", answer=result.answer,
                       ms=int((time.perf_counter() - t0) * 1000), data=result.data)
+
+
+SORRY = "Sorry, say that again."
+
+
+async def _read_audio(audio: UploadFile) -> bytes:
+    content_type = (audio.content_type or "").lower()
+    if not content_type.startswith(AUDIO_PREFIXES):
+        raise HTTPException(status_code=422, detail="send an audio file (webm, wav, mp3, m4a, ogg)")
+    limit = int(get_settings().voice_max_mb * 1024 * 1024)
+    data = await audio.read(limit + 1)
+    if not data or len(data) > limit:
+        raise HTTPException(status_code=422, detail=f"audio must be between 1 byte and {get_settings().voice_max_mb} MB")
+    return data
+
+
+@router.post("/voice-command", response_model=VoiceCommandOut)
+async def voice_command(audio: UploadFile = File(...), user: User = Depends(require("assistant"))) -> VoiceCommandOut:
+    """Friday by voice: what you said becomes a command (summaries, show cameras, call a zone, ...).
+    Silence or noise gives "Sorry, say that again." (200), so the screen can simply say it."""
+    t0 = time.perf_counter()
+    data = await _read_audio(audio)
+    try:
+        transcript, _ = await run_in_threadpool(transcribe, data, audio.filename or "speech.webm",
+                                                (audio.content_type or "").lower())
+    except SttUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"speech to text is not available: {exc}")
+    transcript = transcript.strip()
+    if not transcript:
+        return VoiceCommandOut(transcript="", intent="unknown", status="unknown", answer=SORRY, confirm_token=None,
+                               ms=int((time.perf_counter() - t0) * 1000), data={})
+    result = await run_in_threadpool(commands.handle, transcript, user)
+    await run_in_threadpool(_log, user, "assistant_command", "voice", {
+        "text": transcript, "intent": result.intent, "status": result.status, "answer": result.answer,
+        "source": result.data.get("source")})
+    await _push(result.notices)
+    return VoiceCommandOut(transcript=transcript, intent=result.intent, status=result.status, answer=result.answer,
+                           confirm_token=result.confirm_token, ms=int((time.perf_counter() - t0) * 1000),
+                           data=result.data)
 
 
 @router.post("/speak", responses={200: {"content": {"audio/wav": {}}}})

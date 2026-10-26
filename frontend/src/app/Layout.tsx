@@ -33,6 +33,7 @@ import { nowIST } from '@/lib/time'
 import { useAuth } from '@/lib/auth'
 import { wsClient } from '@/lib/ws'
 import { DemoAlert } from '@/components/demo/DemoAlert'
+import { FridayBridge } from '@/components/friday/FridayBridge'
 import { useMe } from '@/components/admin/kit'
 import {
   AnimatedSidebar,
@@ -180,6 +181,7 @@ export function Layout() {
       </AnimatedSidebar>
 
       <AnimatedSidebarInset className="h-dvh min-h-0 overflow-hidden bg-black">
+        <FridayBridge />
       {/* ── Emergency alert_all banner across top of app ──── */}
         {alertNotice && (
           <div

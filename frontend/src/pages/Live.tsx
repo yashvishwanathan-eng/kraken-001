@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   Video,
@@ -43,6 +43,9 @@ interface ToastAlert {
 
 export function LivePage() {
   const navigate = useNavigate()
+  // ?cameras=a,b : only these cameras (Friday's "show cameras 3, 4 and 12")
+  const [params, setParams] = useSearchParams()
+  const onlyCameras = params.get('cameras')?.split(',').filter(Boolean) ?? null
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [pulsingCameraIds, setPulsingCameraIds] = useState<Record<string, number>>({})
   const [toasts, setToasts] = useState<ToastAlert[]>([])
@@ -241,6 +244,16 @@ export function LivePage() {
       <PageHeader
         title="Live Surveillance Feed"
         description="Real-time CCTV grid, instant multi-tier incident detection, and automated signed stream recovery"
+        actions={onlyCameras ? (
+          <button
+            type="button"
+            onClick={() => setParams({})}
+            className="rounded-full border px-3 py-1 text-xs font-mono text-white hover:bg-white/5 cursor-pointer"
+            style={{ borderColor: 'rgba(125, 211, 252, 0.5)' }}
+          >
+            Showing {onlyCameras.length} camera{onlyCameras.length === 1 ? '' : 's'} · Show all
+          </button>
+        ) : undefined}
       />
 
       {/* Main Container with 14px gap (Bento style) */}
@@ -261,7 +274,7 @@ export function LivePage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-[14px]">
-              {(cameras || []).map(camera => {
+              {(cameras || []).filter(c => !onlyCameras || onlyCameras.includes(c.id)).map(camera => {
                 const isPulsing = Boolean(pulsingCameraIds[camera.id])
 
                 return (

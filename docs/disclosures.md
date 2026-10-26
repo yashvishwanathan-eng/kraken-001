@@ -69,3 +69,5 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - Animated sidebar from beui.dev (`beui.dev/components/motion/animated-sidebar`), pasted by Kirito; adapted to framer-motion, with our own `ease.ts` and `shared-layout-bg.tsx` helpers (the originals were not supplied). Licence: check beui.dev's terms before publishing.
 - Dashboard tile layout and animations adapted from a "Web3 bento" demo component pasted by Kirito (layout ideas only; all data and content are RingGuard's). Source and licence to confirm.
 - framer-motion (MIT), lucide-react (ISC), TanStack Query (MIT), React (MIT), Tailwind CSS (MIT): already used by the frontend.
+- three.js 0.186.1 (MIT): draws Friday's blob (WebGL). @types/three 0.186.0 (MIT) for TypeScript.
+- Friday's blob is adapted from an "anomalous matter" Three.js hero component pasted by Kirito (source and licence to confirm); its noise is the 3D simplex noise by Ashima Arts / Stefan Gustavson (MIT).
