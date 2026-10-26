@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 
 from app.config import BACKEND_DIR, get_settings
 
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # Windows: no console window pops up per worker
+
 log = logging.getLogger("safetyai.workers")
 
 
@@ -46,7 +48,8 @@ class WorkerSupervisor:
         log_file = open(self._log_path(camera_id), "ab")  # the child keeps its own copy of the handle
         try:
             return subprocess.Popen([sys.executable, "-m", "worker.run_worker", "--camera", camera_id],
-                                    cwd=BACKEND_DIR, stdout=log_file, stderr=subprocess.STDOUT)
+                                    cwd=BACKEND_DIR, stdout=log_file, stderr=subprocess.STDOUT,
+                                    creationflags=NO_WINDOW)
         finally:
             log_file.close()
 

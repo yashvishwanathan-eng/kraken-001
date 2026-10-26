@@ -24,6 +24,8 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # Windows: ffmpeg runs without a console window
+
 log = logging.getLogger("safetyai.recorder")
 
 NAME_FORMAT = "%Y-%m-%d_%H-%M-%S"
@@ -110,7 +112,7 @@ class ContinuousRecorder:
         try:
             self._proc = subprocess.Popen(
                 ffmpeg_command(size[0], size[1], self.fps, self.segment_s, self.crf, self.out_dir),
-                stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+                stdin=subprocess.PIPE, stderr=subprocess.PIPE, creationflags=NO_WINDOW)
         except FileNotFoundError:
             log.error("ffmpeg not found on PATH: continuous recording is off")
             self._stop.set()

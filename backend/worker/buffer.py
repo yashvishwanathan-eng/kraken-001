@@ -69,7 +69,8 @@ def write_clip(frames: list[tuple[float, bytes]], out_path: Path) -> bool:
     ]
     try:
         subprocess.run(cmd, input=b"".join(jpg for _, jpg in frames), check=True,
-                       capture_output=True, timeout=FFMPEG_TIMEOUT_S)
+                       capture_output=True, timeout=FFMPEG_TIMEOUT_S,
+                       creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))  # no window on Windows
     except FileNotFoundError:
         log.error("ffmpeg not found on PATH; clip %s not written", out_path.name)
         return False

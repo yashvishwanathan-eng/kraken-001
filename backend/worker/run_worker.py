@@ -5,12 +5,14 @@
 Pipeline for every analysed keyframe:
   capture thread -> pose tracker (+ bag detector about once a second) -> rules engine
   -> incidents stored (snapshot now, 10 s clip a few seconds later) -> API told
-The annotated frame (zones, boxes, IDs, angles, FPS) is published on the local MJPEG port.
+The live view (MJPEG port) is published by its own thread at LIVE_FPS from the newest camera frame, with the
+boxes of the last analysed frame drawn on it, so the video stays smooth even when analysis is slow.
 """
 
 import argparse
 import logging
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -37,6 +39,7 @@ REPORT_EVERY_S = 5.0
 ZONE_REFRESH_S = 30.0
 IDLE_SLEEP_S = 0.005
 JPEG_QUALITY = 80
+LIVE_FPS = 25  # live view frames per second (phone cameras send about 25 to 30), independent of the models
 ZONE_COLOURS = {"restricted": (0, 0, 255), "ppe": (0, 165, 255), "work": (0, 255, 255)}  # BGR
 
 log = logging.getLogger("safetyai.worker")
@@ -137,6 +140,39 @@ def annotate(image: np.ndarray, zones: list[ZoneDef], people: list[Person], fps_
     return out
 
 
+class LiveView:
+    """Publishes the newest camera frame LIVE_FPS times a second with the last analysis drawn on it."""
+
+    def __init__(self, capture: LatestFrameCapture, mjpeg: MjpegServer, zones: list[ZoneDef]) -> None:
+        self.capture, self.mjpeg = capture, mjpeg
+        self.zones, self.people, self.names, self.fps_text = zones, [], None, "starting..."
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._run, name="live-view", daemon=True)
+
+    def start(self) -> "LiveView":
+        self._thread.start()
+        return self
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._thread.join(timeout=2)
+
+    def _run(self) -> None:
+        last_id = -1
+        while not self._stop.wait(1.0 / LIVE_FPS):
+            frame = self.capture.latest()
+            if frame is None or frame.frame_id == last_id:
+                continue
+            last_id = frame.frame_id
+            try:
+                image = annotate(frame.image, self.zones, self.people, self.fps_text, self.names)
+                ok, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
+                if ok:
+                    self.mjpeg.publish(jpeg.tobytes())
+            except Exception:  # one bad frame never stops the live view
+                log.exception("live view frame failed")
+
+
 def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     settings = get_settings()
     cameras = {cam.id: cam for cam in all_cameras()}  # database first (dashboard-added cameras), then yaml
@@ -189,6 +225,7 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     capture = LatestFrameCapture(source, settings.detect_every_n_frames, on_frame=on_frame).start()
     live = {"fps": 0.0}  # analysed fps, read by the heartbeat thread
     heartbeat = HeartbeatSender(camera.id, settings, lambda: (capture.online, live["fps"])).start()
+    view = LiveView(capture, mjpeg, zones).start()
     log.info("camera %s: %d zones, stream on http://127.0.0.1:%d/stream", camera.id, len(zones), camera.port)
 
     started = time.monotonic()
@@ -211,6 +248,7 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
                 if refreshed is not None:  # keep the old zones if the database is briefly down
                     zones = refreshed
                     engine.set_zones(zones)
+                    view.zones = zones
                 if faces_on is not None:  # newly enrolled faces count within ZONE_REFRESH_S
                     faces_on.bank = load_face_bank() or faces_on.bank
                 last_zone_refresh = now
@@ -225,14 +263,22 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
 
             h, w = keyframe.image.shape[:2]
             ppe = fire = None
+            timings = {"people": detect_ms}  # ms per model on this frame, printed with the fps to find a slow one
+            t1 = time.perf_counter()
             if ppe_detector is not None and any(z.kind == "ppe" for z in zones):
                 ppe = [DetectionObs(d.xyxy, d.label, d.confidence) for d in ppe_detector.detect(keyframe.image)]
+                timings["ppe"], t1 = (time.perf_counter() - t1) * 1000, time.perf_counter()
             if fire_detector is not None:
                 fire = [DetectionObs(d.xyxy, d.label, d.confidence) for d in fire_detector.detect(keyframe.image)]
+                timings["fire"], t1 = (time.perf_counter() - t1) * 1000, time.perf_counter()
             riders = None
             if helmet_detector is not None:
                 riders = [DetectionObs(d.xyxy, d.label, d.confidence) for d in helmet_detector.detect(keyframe.image)]
+                timings["helmet"], t1 = (time.perf_counter() - t1) * 1000, time.perf_counter()
             names = faces_on.update(keyframe.image, people, zones) if faces_on is not None else None
+            if faces_on is not None:
+                timings["faces"] = (time.perf_counter() - t1) * 1000
+            view.people, view.names = people, names
             candidates = engine.update(now, datetime.now(timezone.utc), w, h, [to_obs(p) for p in people], bags,
                                        ppe=ppe, fire=fire, riders=riders, identities=names)
 
@@ -241,15 +287,19 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
                 analysed_fps = analysed_in_window / (now - window_start)
                 live["fps"] = analysed_fps
                 fps_text = f"analysed {analysed_fps:.1f} fps | camera {capture.camera_fps:.1f} fps"
-                print(f"[{camera.id}] {fps_text} | persons={len(people)} | detect {detect_ms:.0f} ms", flush=True)
+                view.fps_text = fps_text
+                ms = " ".join(f"{k} {v:.0f}" for k, v in timings.items())
+                print(f"[{camera.id}] {fps_text} | persons={len(people)} | ms: {ms}", flush=True)
                 window_start, analysed_in_window = now, 0
 
+            if not candidates:
+                continue
+            # the snapshot is the analysed frame itself, so its boxes match the picture exactly
             ok, jpeg = cv2.imencode(".jpg", annotate(keyframe.image, zones, people, fps_text, names),
                                     [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
             if not ok:
                 continue
             jpeg_bytes = jpeg.tobytes()
-            mjpeg.publish(jpeg_bytes)
             for candidate in candidates:
                 incident_id = reporter.report(candidate, jpeg_bytes, now)
                 print(f"[{camera.id}] INCIDENT {incident_id} {candidate.type} ({candidate.severity}) "
@@ -258,6 +308,7 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
         pass
     finally:
         heartbeat.stop()
+        view.stop()
         capture.stop()
         if recorder is not None:
             recorder.stop()
