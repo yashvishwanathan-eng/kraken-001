@@ -234,6 +234,27 @@ class DebugMeter:
         return line
 
 
+OLD_ACK = BACKEND_DIR / "media" / "ack" / "yes_boss.wav"
+
+
+def ensure_rumik_ack(path: Path, speak=None) -> Path:
+    """ "Yes, boss" must be Friday's own (Rumik) voice. If the file is missing, ask Rumik once and save it;
+    if Rumik is not set up, fall back to the old recording so the listener still answers."""
+    if path.exists():
+        return path
+    try:
+        if speak is None:
+            from app.services.tts import speak
+        audio, _ms = speak("Yes, boss.")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(audio)
+        log.info("saved Friday's 'Yes, boss' in the Rumik voice: %s", path)
+        return path
+    except Exception as exc:  # no key, no network: keep working with the old sound
+        log.warning("could not make 'Yes, boss' in the Rumik voice (%s): using %s", exc, OLD_ACK.name)
+        return OLD_ACK
+
+
 class WakeListener:
     def __init__(self, *, threshold: float | None = None, device: int | str | None = None,
                  ack_sound: Path | None = None) -> None:
@@ -241,7 +262,7 @@ class WakeListener:
         self.model_name = s.wake_model
         self.trigger = WakeTrigger(threshold if threshold is not None else s.wake_threshold, s.wake_cooldown_s)
         self.device = device_choice(device if device is not None else s.wake_device)
-        self.ack_path = ack_sound or (BACKEND_DIR / s.wake_ack_sound)
+        self.ack_path = ack_sound or ensure_rumik_ack(BACKEND_DIR / s.wake_ack_sound)
         self.ack_samples = read_wav_samples(self.ack_path) if self.ack_path and self.ack_path.exists() else None
         if self.ack_samples is None:
             log.warning("ack sound not found at %s: the listener will trigger without playing it", self.ack_path)

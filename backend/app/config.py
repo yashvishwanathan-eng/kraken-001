@@ -2,7 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PRODUCT_NAME = "RingGuard"  # the product name; change here only
@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     demo_user_pins: str = ""  # "anita=1111,vikram=2222,..." used only by python -m app.seed
     demo_responder_phones: str = ""  # "anita=+9198...,ravi=+9198..." used only by python -m app.seed
     dashboard_url: str = "http://localhost:5173"  # where invitation links and QR codes point (the laptop's address)
+
+    @field_validator("dashboard_url", "wake_ack_sound", mode="before")
+    @classmethod
+    def _empty_means_default(cls, value, info):
+        """DASHBOARD_URL= (empty) in .env would open just "/assistant": an empty value keeps the default."""
+        return value if value not in (None, "") else cls.model_fields[info.field_name].default
     invite_ttl_h: float = 48.0  # an invitation link works for this long
     email_mode: str = "auto"  # auto, live, simulate, off
     smtp_host: str = ""
@@ -46,7 +52,7 @@ class Settings(BaseSettings):
     wake_threshold: float = 0.5  # 0 to 1; higher is stricter (fewer false alarms, may miss some)
     wake_cooldown_s: float = 2.0  # after a trigger, ignore the mic this long
     wake_device: str = ""  # microphone number or name; empty = the default microphone
-    wake_ack_sound: str = "media/ack/yes_boss.wav"  # played on trigger; relative to backend/
+    wake_ack_sound: str = "media/ack/yes_boss_rumik.wav"  # "Yes, boss" in Rumik's voice; made once if missing
     data_key: str = ""  # secret: encrypts guard personal details and computes badge lookups. Keep it safe.
     badge_window_s: int = 300  # a badge scan this recent covers an entry into its area
     presence_window_s: int = 900  # who is 'present' at a time: a scan this recent in that area

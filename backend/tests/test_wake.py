@@ -200,3 +200,29 @@ def test_auto_engine_uses_the_trained_file_when_it_exists(tmp_path):
     model.write_bytes(b"onnx")
     assert engine_for(str(model), "auto") == "onnx"
     assert engine_for(str(model), "vosk") == "vosk"
+
+
+def test_yes_boss_is_made_once_in_the_rumik_voice(tmp_path):
+    from voice.wake import OLD_ACK, ensure_rumik_ack
+
+    target = tmp_path / "ack" / "yes_boss_rumik.wav"
+    asked = []
+
+    def speak(text):
+        asked.append(text)
+        return b"RIFF-rumik", 900
+
+    assert ensure_rumik_ack(target, speak) == target and target.read_bytes() == b"RIFF-rumik"
+    assert ensure_rumik_ack(target, speak) == target and asked == ["Yes, boss."]  # not asked again
+
+    def broken(text):
+        raise RuntimeError("no key")
+
+    assert ensure_rumik_ack(tmp_path / "other.wav", broken) == OLD_ACK
+
+
+def test_empty_dashboard_url_keeps_the_default():
+    from app.config import Settings
+
+    assert Settings(dashboard_url="").dashboard_url == "http://localhost:5173"
+    assert Settings(dashboard_url="http://10.0.0.5:5173").dashboard_url == "http://10.0.0.5:5173"
