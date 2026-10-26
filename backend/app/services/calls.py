@@ -209,6 +209,8 @@ class CallService:
         self._last_dial = time.monotonic()
         t0 = time.perf_counter()
         speak_only = None if self.client.public_ok() else self._speak_only(call_id)
+        if speak_only is None:
+            self._prepare_voice(call_id)  # Rumik audio is made while the phone rings
         try:
             sid = self.client.create_call(to_phone, call_id, speak_only)
         except TwilioError as exc:
@@ -224,6 +226,23 @@ class CallService:
             db.commit()
         log.info("call=%d step=dial sid=%s ms=%.1f", call_id, sid, (time.perf_counter() - t0) * 1000)
         self._after_placed(call_id)
+
+    def _prepare_voice(self, call_id: int) -> None:
+        """Make the first sentence (and the short "one second" fillers) in the Rumik voice while it rings."""
+        from app.services import call_agent, call_voice
+        from app.services.escalation import alert_text  # escalation imports this module
+
+        with SessionLocal() as db:
+            call = db.get(Call, call_id)
+            incident = incident_ops.load(db, call.incident_id) if call.incident_id else None
+            if self.settings.call_style == "conversation" and call.kind in ("alert", "roll_call", "direct"):
+                texts = [call_agent.opening(call, incident), *call_agent.FILLERS]
+            else:
+                texts = [alert_text(incident, self.settings.timezone) if incident and call.kind == "alert"
+                         else call.message]
+        for text in texts:
+            if text:
+                call_voice.prepare(text)
 
     def _speak_only(self, call_id: int) -> str:
         """The call still tells the problem (twice) when PUBLIC_BASE_URL is missing or wrong."""

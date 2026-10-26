@@ -138,6 +138,7 @@ Routing by severity:
 
 Call mechanics:
 - Alert text is ready BEFORE dialling. Calls open in English with `<Say>` straight away. Tamil and Hindi are not used at the start of a call.
+- Since 26 Oct (P29) calls are a conversation with Friday by default (`CALL_STYLE=conversation`, `app/services/call_agent.py`): she says what happened and where, asks where they are, listens and answers (Groq JSON {reply, action}, actions checked by our code), connects the admin on request, reports every reply to the dashboard. The keypad menu below is `CALL_STYLE=menu`.
 - `<Gather input="speech dtmf">`: 1 = going (ack), 2 = false alarm, 3 = alert all guards (with confirm), 4 = connect the manager, 9 = repeat (P27). Speech mapped to the same 4 intents (keyword match first, short Groq prompt as fallback).
 - Phone acknowledgements (keypad or voice) use the responder linked to the call. They never take the user from the request body.
 - **Critical**: voice and keypad can only ACKNOWLEDGE. Closing needs the dashboard.

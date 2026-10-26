@@ -60,6 +60,14 @@ export function FridayBridge() {
       setSpeaker(Boolean((event as unknown as { active?: boolean }).active))
       return
     }
+    if (kind === 'call_reply') {
+      // what someone said on a call Friday made: shown on her page and spoken on this laptop
+      const r = event as unknown as { from: string; text: string; connected_to?: string | null }
+      const line = r.connected_to ? `${r.from} asked for the admin. Connecting to ${r.connected_to}.` : `${r.from} says: ${r.text}`
+      showState('idle', { heard: `${r.from} on the phone`, answer: line })
+      if (isSpeaker()) void speak(line)
+      return
+    }
     if (notice && typeof notice === 'object' && notice.kind === 'friday') {
       // "show cameras 3 and 4": open them now, while she is still talking
       if (notice.camera_ids?.length) navigate(`/live?cameras=${encodeURIComponent(notice.camera_ids.join(','))}`)

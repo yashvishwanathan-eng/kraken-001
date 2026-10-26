@@ -89,6 +89,8 @@ class Settings(BaseSettings):
     low_repeat_count: int = 3
     low_repeat_window_min: int = 60
     onscreen_grace_s: float = 5.0  # on the dashboard: this long to react before the phone rings
+    call_style: str = "conversation"  # conversation: Friday talks and listens (LLM); menu: the old keypad menu
+    call_voice: str = "rumik"  # rumik: phone calls speak in Friday's Rumik voice (falls back to twilio); twilio
     no_answer_alert_all_s: float = 45.0  # critical/high: nobody acknowledged by then -> alert every guard on shift
     stream_token_ttl_s: int = 3600
     api_base_url: str = "http://127.0.0.1:8000"  # where workers send /internal calls

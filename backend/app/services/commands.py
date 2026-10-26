@@ -211,8 +211,7 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
             return CommandResult(intent, "refused", "I couldn't find that person on the roster.")
         call_id = calls.place(kind="direct", to_name=contact.name, to_phone=contact.phone,
                               responder_id=contact.responder_id,
-                              message=f"{PRODUCT_NAME} control room. {user.name} needs you. Please come to the "
-                                      "control room or call back.")
+                              message=f"{user.name} in the control room needs you.")
         _audit(user, "call_person", f"responder:{contact.responder_id}")
         return CommandResult(intent, "done" if call_id else "refused",
                              f"Calling {contact.name}.{_pretend()}" if call_id else _calls_off())
@@ -223,7 +222,7 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
             contacts, fallback = on_shift_contacts_with_fallback(db, zone=zone)
         placed = [c.name for c in contacts if calls.place(
             kind="direct", to_name=c.name, to_phone=c.phone, responder_id=c.responder_id,
-            message=f"{PRODUCT_NAME} control room. Everyone in {zone.replace('-', ' ')}, please respond.")]
+            message=f"The control room needs everyone in {zone.replace('-', ' ')} to respond.")]
         _audit(user, "call_zone", f"zone:{zone}")
         if not contacts:
             return CommandResult(intent, "refused", f"Nobody is on shift in {zone.replace('-', ' ')}.")

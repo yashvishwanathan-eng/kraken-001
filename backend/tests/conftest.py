@@ -108,6 +108,8 @@ def twilio_on(monkeypatch):
     monkeypatch.setattr(get_settings(), "twilio_auth_token", TWILIO_TOKEN)
     monkeypatch.setattr(get_settings(), "public_base_url", PUBLIC_URL)
     monkeypatch.setattr(get_settings(), "twilio_from_number", "+15550000000")
+    monkeypatch.setattr(get_settings(), "call_style", "menu")  # the keypad-menu tests; conversation tests switch
+    monkeypatch.setattr(get_settings(), "rumik_api_key", "")  # Twilio's <Say>, unless a test sets Rumik up
 
 
 def twilio_post(client, path: str, form: dict, token: str = TWILIO_TOKEN):
