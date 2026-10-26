@@ -23,7 +23,8 @@ Severity = Literal["critical", "high", "low"]
 Status = Literal["open", "acknowledged", "resolved", "false_alarm"]
 TimelineAction = Literal[
     "detected", "call_placed", "call_no_answer", "acknowledged", "escalated", "whatsapp_sent", "resolved",
-    "false_alarm", "roll_call_responded", "roll_call_safe", "alert_all", "command", "duty_fallback", "call_skipped_on_screen",
+    "false_alarm", "roll_call_responded", "roll_call_safe", "alert_all", "command", "duty_fallback",
+    "call_skipped_on_screen",
 ]
 Via = Literal["keypad", "voice", "dashboard"]
 
@@ -95,6 +96,9 @@ class OkResponse(BaseModel):
 # ---------- auth and users ----------
 
 Pin = Annotated[str, Field(pattern=r"^\d{4,8}$", description="4 to 8 digits")]
+Phone = Annotated[str, Field(pattern=r"^\+[1-9]\d{7,14}$", description="E.164, e.g. +919876543210")]
+HhMm = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", description="HH:MM, 24-hour")]
+CallZone = Annotated[str, Field(min_length=1, max_length=120)]
 
 
 class PinLogin(BaseModel):
@@ -128,6 +132,10 @@ class UserOut(BaseModel):
     camera_ids: list[str]
     actions: list[str]
     active: bool
+    phone: str | None  # on the call list; None only for people added before phones were required
+    zone: str | None  # call zone ("call the guards of the entrance")
+    shift_start: str | None
+    shift_end: str | None
 
 
 class UserCreate(BaseModel):
@@ -137,6 +145,10 @@ class UserCreate(BaseModel):
     actions: list[str] | None = None  # None: the role's actions, else none
     active: bool = True
     pin: Pin
+    phone: Phone  # every person is on the call list
+    zone: CallZone = "general"
+    shift_start: HhMm = "00:00"  # 00:00 to 00:00 = all day
+    shift_end: HhMm = "00:00"
 
 
 class UserUpdate(BaseModel):
@@ -147,6 +159,10 @@ class UserUpdate(BaseModel):
     actions: list[str] | None = None
     active: bool | None = None
     pin: Pin | None = None
+    phone: Phone | None = None
+    zone: CallZone | None = None
+    shift_start: HhMm | None = None
+    shift_end: HhMm | None = None
 
 
 # ---------- cameras and zones ----------
@@ -217,12 +233,9 @@ class AuditRow(BaseModel):
 
 # ---------- responders ----------
 
-HhMm = Annotated[str, Field(pattern=r"^([01]\d|2[0-3]):[0-5]\d$", description="HH:MM, 24-hour")]
-
-
 class ResponderIn(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=120)]
-    phone: Annotated[str, Field(pattern=r"^\+[1-9]\d{7,14}$", description="E.164, e.g. +919876543210")]
+    phone: Phone
     language: Literal["en", "ta", "hi"] = "en"
     zone: Annotated[str, Field(min_length=1, max_length=120)]
     shift_start: HhMm
@@ -340,6 +353,10 @@ class InviteCreate(BaseModel):
     role: Annotated[str, Field(min_length=1, max_length=32)]
     camera_ids: list[str] | None = None  # None: the role's cameras
     actions: list[str] | None = None  # None: the role's actions
+    phone: Phone  # on the call list as soon as they accept
+    zone: CallZone = "general"
+    shift_start: HhMm = "00:00"
+    shift_end: HhMm = "00:00"
 
 
 class InviteOut(BaseModel):

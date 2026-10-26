@@ -23,7 +23,7 @@ def recent(path: str = "/summary") -> str:
     fmt = "%Y-%m-%dT%H:%M:%SZ"  # Z, not +00:00: a plus sign in a URL becomes a space
     return f"{path}?from={start.strftime(fmt)}&to={end.strftime(fmt)}"
 INVITE = {"name": "Meera Iyer", "email": "meera@example.com", "role": "Guard",
-          "camera_ids": ["cam-webcam"], "actions": ["ack"]}
+          "camera_ids": ["cam-webcam"], "actions": ["ack"], "phone": "+919800000066"}
 
 
 @pytest.fixture

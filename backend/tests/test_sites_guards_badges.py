@@ -201,7 +201,7 @@ def test_summary_counts_entries_without_a_badge(roster, admin):
 
 def test_manager_can_hand_down_only_cameras_and_actions_they_hold(roster):
     manager = login(client, DEMO_PINS["vikram"])  # cam-webcam + cam-phone, delegate_cameras
-    base = {"name": "Sub Guard", "role": "Guard", "pin": "7777"}
+    base = {"name": "Sub Guard", "role": "Guard", "pin": "7777", "phone": "+919800000077"}
     assert client.post("/users", json={**base, "camera_ids": ["cam-webcam"], "actions": ["ack"]},
                        headers=manager).status_code == 201
     base["pin"] = "7778"
@@ -217,4 +217,4 @@ def test_manager_can_hand_down_only_cameras_and_actions_they_hold(roster):
 def test_guard_cannot_delegate(roster):
     guard = login(client, DEMO_PINS["suresh"])
     assert client.post("/users", json={"name": "X", "role": "Guard", "pin": "8888", "camera_ids": [],
-                                       "actions": []}, headers=guard).status_code == 403
+                                       "actions": [], "phone": "+919800000088"}, headers=guard).status_code == 403

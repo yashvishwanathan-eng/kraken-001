@@ -95,7 +95,8 @@ def test_only_user_managers_reach_users(tokens):
 
 
 def test_create_user_validates(tokens):
-    base = {"name": "New Guard", "role": "Guard", "camera_ids": ["cam-webcam"], "actions": ["ack"], "pin": "5555"}
+    base = {"name": "New Guard", "role": "Guard", "camera_ids": ["cam-webcam"], "actions": ["ack"], "pin": "5555",
+            "phone": "+919800000055"}
     admin = tokens["anita"]
     assert client.post("/users", json={**base, "pin": "4444"}, headers=admin).status_code == 409  # PIN taken
     assert client.post("/users", json={**base, "actions": ["fly"]}, headers=admin).status_code == 422

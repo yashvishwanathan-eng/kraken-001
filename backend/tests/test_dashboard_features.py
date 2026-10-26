@@ -146,7 +146,8 @@ def test_roles_fill_new_users_and_push_changes(roster):
     role = client.post("/roles", json={"name": "Patrol", "camera_ids": ["cam-phone"], "actions": ["ack"]},
                        headers=headers)
     assert role.status_code == 201, role.text
-    new = client.post("/users", json={"name": "Meena", "role": "Patrol", "pin": "5555"}, headers=headers).json()
+    new = client.post("/users", json={"name": "Meena", "role": "Patrol", "pin": "5555",
+                                             "phone": "+919800000055"}, headers=headers).json()
     assert (new["camera_ids"], new["actions"], new["staff_id"]) == (["cam-phone"], ["ack"], f"RG-{new['id']:04d}")
 
     extra = user(roster, "Meena")
@@ -168,7 +169,8 @@ def test_invite_carries_the_staff_id(roster, monkeypatch):
     sent = []
     from app.services.email_sender import emailer
     monkeypatch.setattr(emailer, "send", lambda to, subject, body: sent.append(body) or "simulated")
-    out = client.post("/invites", json={"name": "Kiran", "email": "kiran@example.com", "role": "Guard"},
+    out = client.post("/invites", json={"name": "Kiran", "email": "kiran@example.com", "role": "Guard",
+                                             "phone": "+919800000099"},
                       headers=login(client, ADMIN)).json()
     assert out["staff_id"] == f"RG-{out['user_id']:04d}"
     assert out["staff_id"] in sent[0]

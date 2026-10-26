@@ -46,7 +46,7 @@ Status tags:
 | GET | /health | live | | `{cameras:[{id,online,fps}], db, twilio, llm}`. `db`: ok, error, not_checked. `twilio`: ok, not_configured, error, not_checked. `llm`: ok, ollama_only, error, not_checked. |
 | POST | /auth/pin | live | `{pin}` | `{token, user:{id,name,role}}` |
 | GET | /me | live | | `{id, name, role, camera_ids[], actions[]}` |
-| GET, POST, PUT, DELETE | /users | live | `{id,name,role,camera_ids[],actions[],active,pin}`; `pin` is write-only | Admin only. Response never includes `pin`. |
+| GET, POST, PUT, DELETE | /users | live | `{id,name,role,camera_ids[],actions[],active,pin,phone,zone,shift_start,shift_end}`; `pin` is write-only; `phone` (E.164) is required on create (P26) | Admin only. Response never includes `pin`; it adds `staff_id`, `phone`, `zone`, `shift_start`, `shift_end`. |
 | GET | /cameras | live | | `[{id,number,name,stream_url,online,fps,zones:[{id,name,kind,polygon:[[x,y],...]}]}]`. `stream_url` is signed (see Stream tokens). `kind`: restricted, ppe, work. Filtered by the caller's `camera_ids`. |
 | GET | /cameras/{id}/stream-url | live | | `{stream_url}`: a fresh signed URL for that camera, same format and rules as `/cameras`. 403 if not delegated. |
 | GET | /stream/{camera_id}?st=<token> | live | Query: `st` (stream token) | MJPEG, `multipart/x-mixed-replace`. See Stream tokens. |
@@ -154,7 +154,10 @@ Gate 2 needed these details, which the contract did not settle. The backend does
 
 - **P25. Calls depend on who is on the software; demo alarm.** A user is "on the software" while a dashboard of theirs is connected to `/ws/events`. Admin and Manager call steps: not on the software, the call goes out at once; on the software, they get `ONSCREEN_GRACE_S` (5 s) to react on screen first, and acknowledging in that time cancels the call (timeline `call_skipped_on_screen`). Critical: Head Guard 0 s, Admin 0 s (5 s on screen), Manager 5 s (10 s on screen). High: Head Guard 0 s, Manager 0 s (5 s on screen); the Admin still gets WhatsApp only. `POST /demo/incident` raises a demo alarm. New action: `run_demo`. The rest of P25 (Friday voice) follows.
 
+- **P26. Every person is on the call list.** `POST /users` and `POST /invites` require `phone` (E.164) and take `zone` (default `general`) and `shift_start`/`shift_end` (`HH:MM` IST, default `00:00` to `00:00` = all day). The person gets a responder row linked to their user at once, so "alert all guards" and the call ladder reach them (an invited person only after accepting). `PUT /users/{id}` updates them; deactivating takes them off the call list; deleting removes the number. `/users` rows show `phone`, `zone`, `shift_start`, `shift_end` (null for people added before 26 Oct). Numbers are stored by us; a Twilio trial still needs each number verified once in the Twilio console.
+
 ## Changelog
+- 26 Oct: P26 live: phone required when adding or inviting a person; people are on the call list automatically.
 - 26 Oct: P25 (first part) live: on-screen grace in the call ladder, `call_skipped_on_screen`, `POST /demo/incident`, action `run_demo`. Settings `CRITICAL_ADMIN_DELAY_S`, `CRITICAL_MANAGER_DELAY_S`, `HIGH_MANAGER_DELAY_S` replaced by `ONSCREEN_GRACE_S=5`.
 - 26 Oct: P22 (adding and installing cameras, camera numbers, roles, staff IDs), P23 (duty check-in by QR, off-duty guards not called, roster fallback with `duty_fallback`) and P24 (overview, activity log, data usage, voice summaries, Rumik voice) are live on the backend. Additive except: `UserCreate`/`InviteCreate` lists became optional. The frontend builds the screens.
 - 25 Oct: P21 added: sites and areas, guard profiles with encrypted personal details, badge scans, presence, and manager delegation. Endpoints are live.

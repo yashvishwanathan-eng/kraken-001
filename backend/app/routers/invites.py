@@ -27,7 +27,7 @@ from app.models import Invitation, User
 from app.schemas import InviteAccept, InviteCreate, InviteCreated, InviteOut, InvitePreview, LoginResponse, UserBrief
 from app.services.audit import record
 from app.services.email_sender import emailer
-from app.services import roles
+from app.services import roles, roster
 from app.services.permissions import create_session, find_user_by_pin, hash_pin, staff_id
 from app.routers.users import _validate
 
@@ -87,6 +87,7 @@ def create_invite(body: InviteCreate, admin: User = Depends(require("manage_user
                     pin_hash=hash_pin(secrets.token_urlsafe(24)))
         db.add(user)
         db.flush()
+        roster.upsert(db, user, body.phone, body.zone, body.shift_start, body.shift_end)
         token = secrets.token_urlsafe(32)
         inv = Invitation(token_hash=_hash(token), user_id=user.id, email=body.email, created_by=admin.name,
                          expires_at=datetime.now(timezone.utc) + timedelta(hours=settings.invite_ttl_h))

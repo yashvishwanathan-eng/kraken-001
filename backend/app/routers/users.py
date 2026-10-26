@@ -12,16 +12,16 @@ from app.deps import require, require_any
 from app.models import Camera, User
 from app.schemas import UserCreate, UserOut, UserUpdate
 from app.services.audit import record
-from app.services import roles
+from app.services import roles, roster
 from app.services.permissions import ACTIONS, allowed_cameras, end_sessions, find_user_by_pin, hash_pin, staff_id
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-def to_out(user: User) -> UserOut:
+def to_out(user: User, db: DbSession) -> UserOut:
     return UserOut(id=user.id, staff_id=staff_id(user.id), name=user.name, role=user.role,
-                   camera_ids=list(user.camera_ids),
-                   actions=list(user.actions), active=user.active)
+                   camera_ids=list(user.camera_ids), actions=list(user.actions), active=user.active,
+                   **roster.fields(roster.for_user(db, user.id)))
 
 
 def _delegation_guard(actor: User, camera_ids: list[str] | None, actions: list[str] | None) -> None:
@@ -55,7 +55,7 @@ def _validate(db: DbSession, camera_ids: list[str] | None, actions: list[str] | 
 @router.get("", response_model=list[UserOut])
 def list_users(_: User = Depends(require("manage_users"))) -> list[UserOut]:
     with SessionLocal() as db:
-        return [to_out(u) for u in db.scalars(select(User).order_by(User.id))]
+        return [to_out(u, db) for u in db.scalars(select(User).order_by(User.id))]
 
 
 @router.post("", response_model=UserOut, status_code=201)
@@ -68,9 +68,10 @@ def create_user(body: UserCreate, admin: User = Depends(require_any("manage_user
                     actions=actions, active=body.active, pin_hash=hash_pin(body.pin))
         db.add(user)
         db.flush()
+        roster.upsert(db, user, body.phone, body.zone, body.shift_start, body.shift_end)
         record(db, admin, "user_create", target=f"user:{user.id}", detail={"name": user.name, "role": user.role})
         db.commit()
-        return to_out(user)
+        return to_out(user, db)
 
 
 @router.put("/{user_id}", response_model=UserOut)
@@ -84,9 +85,14 @@ def update_user(user_id: int, body: UserUpdate, admin: User = Depends(require_an
         if user_id == admin.id and (body.active is False or
                                     (body.actions is not None and "manage_users" not in body.actions)):
             raise HTTPException(status_code=400, detail="you cannot deactivate yourself or remove your own manage_users")
+        call_fields = {"phone", "zone", "shift_start", "shift_end"}
         changes = body.model_dump(exclude_none=True, exclude={"pin"})
         for field, value in changes.items():
-            setattr(user, field, sorted(set(value)) if field in ("camera_ids", "actions") else value)
+            if field not in call_fields:
+                setattr(user, field, sorted(set(value)) if field in ("camera_ids", "actions") else value)
+        row = roster.upsert(db, user, body.phone, body.zone, body.shift_start, body.shift_end)
+        if row is not None and body.active is not None:
+            row.active = body.active  # a deactivated person is taken off the call list too
         if body.pin is not None:
             user.pin_hash = hash_pin(body.pin)
         if body.pin is not None or body.active is False:
@@ -94,7 +100,7 @@ def update_user(user_id: int, body: UserUpdate, admin: User = Depends(require_an
         record(db, admin, "user_update", target=f"user:{user.id}",
                detail={**changes, **({"pin": "reset"} if body.pin is not None else {})})
         db.commit()
-        return to_out(user)
+        return to_out(user, db)
 
 
 @router.delete("/{user_id}", status_code=204)
@@ -106,6 +112,9 @@ def delete_user(user_id: int, admin: User = Depends(require("manage_users"))) ->
         if user is None:
             raise HTTPException(status_code=404, detail=f"user {user_id} not found")
         record(db, admin, "user_delete", target=f"user:{user.id}", detail={"name": user.name})
+        row = roster.for_user(db, user.id)
+        if row is not None:
+            db.delete(row)  # never leave a deleted person's number on the call list
         db.delete(user)
         db.commit()
     return Response(status_code=204)
