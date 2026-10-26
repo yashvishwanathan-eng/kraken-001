@@ -4,7 +4,7 @@
 import pytest
 
 from app.config import get_settings
-from app.models import Call, Incident
+from app.models import Call, Incident, RollCall
 from app.services.calls import CallService
 from app.services.escalation import Escalation, ladder_for
 from tests.conftest import check_in, make_incident
@@ -52,9 +52,11 @@ def timeline(db, incident_id):
 def test_ladders_match_the_rules():
     s = get_settings()
     assert [(st.delay_s, st.action, st.who) for st in ladder_for("critical", s)] == [
-        (0, "call", "head_guard"), (0, "whatsapp", "admin"), (0, "call", "admin"), (5, "call", "manager")]
+        (0, "call", "head_guard"), (0, "whatsapp", "admin"), (0, "call", "admin"), (5, "call", "manager"),
+        (45, "alert_all", "guards")]
     assert [(st.delay_s, st.action, st.who) for st in ladder_for("high", s)] == [
-        (0, "call", "head_guard"), (0, "whatsapp", "admin"), (0, "call", "manager")]
+        (0, "call", "head_guard"), (0, "whatsapp", "admin"), (0, "call", "manager"), (0, "call", "admin"),
+        (45, "alert_all", "guards")]
     assert [(st.action, st.who) for st in ladder_for("low", s)] == [("whatsapp", "zone_manager")]
 
 
@@ -63,10 +65,10 @@ def test_critical_ladder_calls_head_guard_then_admin_then_manager(ladder, roster
     incident_id = make_incident(roster, type_="fire", severity="critical")
     ladder.start(incident_id)
     jobs = ladder.scheduler.jobs
-    assert sorted(jobs) == [f"ladder:{incident_id}:{i}" for i in range(4)]
+    assert sorted(jobs) == [f"ladder:{incident_id}:{i}" for i in range(5)]
     delays = sorted(round((j.run_date - jobs[f"ladder:{incident_id}:0"].run_date).total_seconds())
                     for j in jobs.values())
-    assert delays == [0, 0, 0, 5]  # nobody on screen: Admin at once, Manager 5 s later
+    assert delays == [0, 0, 0, 5, 45]  # nobody on screen: Admin at once, Manager 5 s later, all guards at 45 s
     for i in range(4):
         ladder.scheduler.run(f"ladder:{incident_id}:{i}")
     assert timeline(roster, incident_id) == [
@@ -96,13 +98,38 @@ def test_step_that_slips_through_after_ack_does_nothing(ladder, roster):
     assert timeline(roster, incident_id) == [("detected", None)]
 
 
-def test_high_ladder_never_calls_the_admin(ladder, roster):
+def test_high_ladder_calls_the_whole_hierarchy(ladder, roster):
     incident_id = make_incident(roster, type_="unattended", severity="high")
+    ladder.start(incident_id)
+    for i in range(4):  # everything before the 45 s "nobody answered" step
+        ladder.scheduler.run(f"ladder:{incident_id}:{i}")
+    called = [c.to_name for c in roster.query(Call).filter_by(incident_id=incident_id).order_by(Call.id)]
+    assert called == ["Ravi Kumar", "Vikram Shah", "Anita Rao"]
+
+
+def test_nobody_answering_alerts_every_guard_with_the_problem(ladder, roster):
+    incident_id = make_incident(roster, type_="fire", severity="critical")
     ladder.start(incident_id)
     for job_id in sorted(ladder.scheduler.jobs):
         ladder.scheduler.run(job_id)
-    called = [c.to_name for c in roster.query(Call).filter_by(incident_id=incident_id).order_by(Call.id)]
-    assert called == ["Ravi Kumar", "Vikram Shah"]
+    actions = timeline(roster, incident_id)
+    assert ("nobody_answered", None) in actions and ("alert_all", None) in actions
+    roll = roster.query(RollCall).one()
+    assert roll.started_by == "RingGuard" and roll.message.startswith("RingGuard alert. Critical: Fire")
+    guards = roster.query(Call).filter_by(kind="roll_call").all()
+    assert len(guards) == 4 and all(c.message == roll.message for c in guards)
+    assert any("Nobody answered" in text and "Fire" in text for _, text, _ in ladder.whatsapp.sent)
+
+
+def test_acknowledging_in_time_means_no_alert_all(ladder, roster):
+    incident_id = make_incident(roster, type_="fire", severity="critical")
+    ladder.start(incident_id)
+    ladder.scheduler.run(f"ladder:{incident_id}:0")
+    incident = roster.get(Incident, incident_id)
+    incident.status = "acknowledged"
+    roster.commit()
+    ladder.run_step(incident_id, 4)  # even if the 45 s step slipped through
+    assert roster.query(RollCall).count() == 0
 
 
 def test_low_incident_only_messages_the_zone_manager(ladder, roster):

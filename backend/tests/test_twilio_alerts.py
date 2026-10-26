@@ -93,9 +93,9 @@ def test_high_can_be_marked_false_alarm_by_phone(roster, twilio_on):
     assert incident(roster, incident_id).status == "false_alarm"
 
 
-def test_press_3_connects_the_supervisor(roster, twilio_on):
+def test_press_4_connects_the_supervisor(roster, twilio_on):
     call_id = alert_call(roster, make_incident(roster))
-    reply = twilio_post(client, f"/twilio/gather?call_id={call_id}", {"Digits": "3"})
+    reply = twilio_post(client, f"/twilio/gather?call_id={call_id}", {"Digits": "4"})
     assert "<Dial" in reply.text and "+919800000002" in reply.text  # Vikram, the manager
 
 
@@ -116,7 +116,14 @@ def test_alert_everybody_from_the_phone_needs_confirmation(roster, twilio_on, si
     done = twilio_post(client, f"/twilio/gather?call_id={call_id}&step=confirm_all", {"Digits": "1"})
     assert "Alerting 4 guards" in done.text
     roster.expire_all()
-    assert roster.query(RollCall).one().started_by == "Ravi Kumar"
+    roll = roster.query(RollCall).one()
+    assert roll.started_by == "Ravi Kumar" and "Critical: Fire" in roll.message  # the guards hear the problem
+
+
+def test_press_3_also_asks_to_alert_everybody(roster, twilio_on, simulate):
+    call_id = alert_call(roster, make_incident(roster, type_="fire", severity="critical"))
+    ask = twilio_post(client, f"/twilio/gather?call_id={call_id}", {"Digits": "3"})
+    assert "Press 1 to confirm" in ask.text
 
 
 def test_guard_without_permission_cannot_alert_everybody(roster, twilio_on):

@@ -36,7 +36,7 @@ log = logging.getLogger("safetyai.twilio")
 
 MAX_PROMPTS = 2
 
-ALERT_DIGITS = {"1": "ack", "2": "false_alarm", "3": "supervisor", "9": "repeat"}
+ALERT_DIGITS = {"1": "ack", "2": "false_alarm", "3": "alert_all", "4": "supervisor", "9": "repeat"}
 ROLL_DIGITS = {"1": "responding", "2": "safe", "9": "repeat"}
 ROLL_CALL_ACTION = {"responding": "roll_call_responded", "safe": "roll_call_safe"}  # contract timeline names
 # Order matters: the first phrase found wins, so "alert everybody" is checked before a plain "yes".
@@ -96,6 +96,7 @@ def url(path: str) -> str:
 def gather(prompt: str, call_id: int, hints: str, step: str = "") -> str:
     action = url(f"/twilio/gather?call_id={call_id}" + (f"&step={step}" if step else ""))
     return (f'<Gather input="speech dtmf" numDigits="1" timeout="6" speechTimeout="auto" method="POST" '
+            f'speechModel="phone_call" enhanced="true" '
             f'language={quoteattr(get_settings().call_language)} hints={quoteattr(hints)} action={quoteattr(action)}>'
             f"{say(prompt)}</Gather>")
 
@@ -124,7 +125,10 @@ def _voice(call_id: int, attempt: int) -> Response:
         if call.kind == "direct":
             return twiml(say(call.message or f"{PRODUCT_NAME} control room calling. Please call back."), "<Hangup/>")
         if call.kind == "roll_call":
-            prompt = f"{PRODUCT_NAME} alert. {call.message} Press 1 if you are responding. Press 2 if you are safe."
+            problem = call.message or ""
+            if not problem.startswith(PRODUCT_NAME):
+                problem = f"{PRODUCT_NAME} alert. {problem}"
+            prompt = f"{problem} Press 1 if you are responding. Press 2 if you are safe."
             return twiml(gather(prompt, call_id, "responding, safe, repeat"),
                          redirect_to_voice(call_id, attempt + 1) if attempt < MAX_PROMPTS else say("Goodbye."))
         incident = incident_ops.load(db, call.incident_id) if call.incident_id else None
@@ -134,13 +138,13 @@ def _voice(call_id: int, attempt: int) -> Response:
             by = f" by {incident.acknowledged_by}" if incident.acknowledged_by else ""
             return twiml(say(f"Incident {incident.id} was already {incident.status.replace('_', ' ')}{by}. Thank you."),
                          "<Hangup/>")
-        options = " Press 1 if you are going."
+        options = " What should we do? Press 1 or say going, if you are handling it."
         if incident.severity == "high":
             options += " Press 2 if it is a false alarm."
-        options += " Press 3 for the supervisor. Press 9 to repeat."
         user = _linked_user(db, call)
         if user is not None and can(user, "alert_all"):
-            options += " To alert all guards, say alert everybody."
+            options += " Press 3 or say alert everybody, to alert all guards."
+        options += " Press 4 to talk to the manager. Press 9 to repeat."
         prompt = alert_text(incident, get_settings().timezone) + options
         return twiml(gather(prompt, call_id, "going, false alarm, supervisor, repeat, alert everybody"),
                      redirect_to_voice(call_id, attempt + 1) if attempt < MAX_PROMPTS else say("Goodbye."))
@@ -199,8 +203,10 @@ def _gather(call_id: int, digits: str, speech: str, step: str) -> Response:
         if step == "confirm_all":
             if digits[:1] == "1" or intent == "ack":
                 incident_id = call.incident_id
+                current = incident_ops.load(db, incident_id) if incident_id else None
+                problem = alert_text(current, get_settings().timezone) if current else "Emergency: please respond now."
                 db.close()
-                notice = alerts.alert_all("Emergency: please respond now.", by_name=name, user=user, channel="phone",
+                notice = alerts.alert_all(problem, by_name=name, user=user, channel="phone",
                                           incident_id=incident_id, via=via)
                 _publish(notice)
                 _publish(notice.get("incident"))

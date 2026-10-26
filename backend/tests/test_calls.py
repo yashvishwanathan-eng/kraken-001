@@ -10,16 +10,20 @@ from app.services.calls import CallService, TwilioRejected
 
 
 class FakeTwilio:
-    def __init__(self, reject=()):
-        self.dialled, self.reject = [], set(reject)
+    def __init__(self, reject=(), public=True):
+        self.dialled, self.reject, self.public, self.spoken = [], set(reject), public, []
 
     def configured(self):
         return True
 
-    def create_call(self, to, call_id):
+    def public_ok(self):
+        return self.public
+
+    def create_call(self, to, call_id, speak_only=None):
         if to in self.reject:
             raise TwilioRejected("Twilio 400: number not verified")
         self.dialled.append((to, time.monotonic()))
+        self.spoken.append(speak_only)
         return f"CA{call_id}"
 
     def hangup(self, call_sid):
@@ -79,3 +83,27 @@ def test_off_mode_places_nothing(roster, monkeypatch):
     monkeypatch.setattr(get_settings(), "calls_mode", "off")
     assert CallService(get_settings()).place(kind="alert", to_name="x", to_phone="+919800000003") is None
     assert roster.query(Call).count() == 0
+
+
+def test_without_a_public_address_the_call_still_speaks_the_problem(monkeypatch, roster):
+    from tests.conftest import make_incident
+
+    monkeypatch.setattr(get_settings(), "calls_mode", "live")
+    fake = FakeTwilio(public=False)
+    service = CallService(get_settings(), client=fake)
+    try:
+        incident_id = make_incident(roster, type_="fire", severity="critical")
+        service.place(kind="alert", to_name="Ravi Kumar", to_phone="+919800000003", incident_id=incident_id)
+        assert wait_until(lambda: len(fake.spoken) == 1)
+    finally:
+        service.stop()
+    twiml = fake.spoken[0]
+    assert twiml.count("<Say") == 2 and "Critical: Fire" in twiml and "open the RingGuard dashboard" in twiml
+
+
+def test_public_address_must_be_a_full_url(monkeypatch):
+    from app.services.calls import TwilioClient
+
+    for url, ok in [("", False), ("ab12.ngrok-free.app", False), ("https://ab12.ngrok-free.app", True)]:
+        monkeypatch.setattr(get_settings(), "public_base_url", url)
+        assert TwilioClient(get_settings()).public_ok() is ok

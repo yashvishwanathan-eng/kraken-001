@@ -134,7 +134,65 @@ def audio_report(samples) -> str:
     return f"loudness {rms:.0f}, peak {peak:.0f} of 32767, clipped {clipped:.2f}% -> {verdict}"
 
 
-def load_model(model_name: str):
+WAKE_WORDS = ("hey", "friday")
+VOSK_GRAMMAR = ["hey friday", "hey", "friday", "[unk]"]
+
+
+def heard_wake(text: str) -> bool:
+    """True when the recognised words contain "hey friday" in that order (anything around it is ignored)."""
+    words = text.lower().split()
+    return any(words[i:i + 2] == list(WAKE_WORDS) for i in range(len(words) - 1))
+
+
+class VoskWake:
+    """"Hey Friday" without a trained model: Vosk, an offline speech recogniser, listens with a tiny grammar
+    (only "hey", "friday" and "unknown"), so it cannot drift into other words. Same interface as openWakeWord's
+    Model (predict(chunk) -> {name: score}, reset()), so the listener, --debug and --mic-test work unchanged.
+    The score is 1.0 when "hey friday" was just heard, else 0.0. The speech model (about 40 MB) downloads once."""
+
+    def __init__(self, model_name: str, recognizer_factory=None) -> None:
+        import json
+
+        self._json = json
+        if recognizer_factory is None:
+            from vosk import KaldiRecognizer, Model, SetLogLevel
+
+            SetLogLevel(-1)
+            log.info("loading offline speech model %s (downloads once, about 40 MB)", model_name)
+            model = Model(model_name=model_name)
+            grammar = json.dumps(VOSK_GRAMMAR)
+            recognizer_factory = lambda: KaldiRecognizer(model, SAMPLE_RATE, grammar)  # noqa: E731
+        self._new = recognizer_factory
+        self.reset()
+
+    def reset(self) -> None:
+        self._rec = self._new()
+
+    def predict(self, chunk) -> dict[str, float]:
+        import numpy as np
+
+        if self._rec.AcceptWaveform(np.asarray(chunk, dtype=np.int16).tobytes()):
+            text = self._json.loads(self._rec.Result()).get("text", "")
+        else:
+            text = self._json.loads(self._rec.PartialResult()).get("partial", "")
+        if heard_wake(text):
+            self.reset()  # start fresh, so the same words never trigger twice
+            return {"hey_friday": 1.0}
+        return {"hey_friday": 0.0}
+
+
+def engine_for(model_name: str, engine: str | None = None) -> str:
+    """auto: our trained "Hey Friday" model when its file exists, otherwise Vosk."""
+    engine = (engine or get_settings().wake_engine).lower()
+    if engine != "auto":
+        return engine
+    path = Path(model_name)
+    return "onnx" if (path if path.is_absolute() else BACKEND_DIR / path).exists() else "vosk"
+
+
+def load_model(model_name: str, engine: str | None = None):
+    if engine_for(model_name, engine) == "vosk":
+        return VoskWake(get_settings().wake_vosk_model)
     from openwakeword.model import Model
 
     return Model(wakeword_models=[resolve_model(model_name)], inference_framework="onnx")
@@ -205,8 +263,10 @@ class WakeListener:
                 log.warning("microphone status: %s", status)
             chunks.put(indata[:, 0].copy())
 
-        log.info("listening for the wake word (model %s, threshold %.2f); Ctrl+C to stop",
-                 self.model_name, self.trigger.threshold)
+        engine = engine_for(self.model_name)
+        log.info("listening for \"Hey Friday\" (%s, threshold %.2f); Ctrl+C to stop",
+                 self.model_name if engine == "onnx" else f"offline speech model {get_settings().wake_vosk_model}",
+                 self.trigger.threshold)
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16", blocksize=CHUNK_SAMPLES,
                             device=self.device, callback=microphone):
             try:

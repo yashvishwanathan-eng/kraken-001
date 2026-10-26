@@ -40,7 +40,9 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""  # secret: .env only
     smtp_from: str = ""  # e.g. "RingGuard <alerts@example.com>"
+    wake_engine: str = "auto"  # auto (trained model if the file exists, else vosk), onnx, vosk
     wake_model: str = "models/hey_friday.onnx"  # trained on Colab (tools/wake_training/README.md); relative to backend/
+    wake_vosk_model: str = "vosk-model-small-en-in-0.4"  # offline speech model (Indian English), downloaded once
     wake_threshold: float = 0.5  # 0 to 1; higher is stricter (fewer false alarms, may miss some)
     wake_cooldown_s: float = 2.0  # after a trigger, ignore the mic this long
     wake_device: str = ""  # microphone number or name; empty = the default microphone
@@ -81,6 +83,7 @@ class Settings(BaseSettings):
     low_repeat_count: int = 3
     low_repeat_window_min: int = 60
     onscreen_grace_s: float = 5.0  # on the dashboard: this long to react before the phone rings
+    no_answer_alert_all_s: float = 45.0  # critical/high: nobody acknowledged by then -> alert every guard on shift
     stream_token_ttl_s: int = 3600
     api_base_url: str = "http://127.0.0.1:8000"  # where workers send /internal calls
     session_ttl_h: float = 12.0  # a login lasts one shift

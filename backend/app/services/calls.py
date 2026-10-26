@@ -21,11 +21,12 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from xml.sax.saxutils import escape, quoteattr
 
 import httpx
 from sqlalchemy import select
 
-from app.config import Settings, get_settings
+from app.config import PRODUCT_NAME, Settings, get_settings
 from app.db import SessionLocal
 from app.models import Call
 from app.services import incidents as incident_ops
@@ -79,7 +80,14 @@ class TwilioClient:
             return response.json()
         raise TwilioError(last)
 
-    def create_call(self, to: str, call_id: int) -> str:
+    def public_ok(self) -> bool:
+        """Twilio can reach our webhooks only through a full public address (ngrok: https://....ngrok-free.app)."""
+        return self.settings.public_base_url.startswith(("https://", "http://"))
+
+    def create_call(self, to: str, call_id: int, speak_only: str | None = None) -> str:
+        if speak_only is not None:  # no public address: Twilio reads this text, no keypresses come back
+            return self._post("/Calls.json", {"To": to, "From": self.settings.twilio_from_number,
+                                              "Twiml": speak_only, "Timeout": str(self.settings.call_ring_timeout_s)})
         base = self.settings.public_base_url.rstrip("/")
         result = self._post("/Calls.json", {
             "To": to,
@@ -200,8 +208,9 @@ class CallService:
             self._sleep(wait)  # stay under Twilio's calls-per-second limit
         self._last_dial = time.monotonic()
         t0 = time.perf_counter()
+        speak_only = None if self.client.public_ok() else self._speak_only(call_id)
         try:
-            sid = self.client.create_call(to_phone, call_id)
+            sid = self.client.create_call(to_phone, call_id, speak_only)
         except TwilioError as exc:
             log.error("call=%d step=dial failed: %s (WhatsApp and the dashboard still alert)", call_id, exc)
             with SessionLocal() as db:
@@ -215,6 +224,21 @@ class CallService:
             db.commit()
         log.info("call=%d step=dial sid=%s ms=%.1f", call_id, sid, (time.perf_counter() - t0) * 1000)
         self._after_placed(call_id)
+
+    def _speak_only(self, call_id: int) -> str:
+        """The call still tells the problem (twice) when PUBLIC_BASE_URL is missing or wrong."""
+        from app.services.escalation import alert_text  # escalation imports this module
+
+        with SessionLocal() as db:
+            call = db.get(Call, call_id)
+            incident = incident_ops.load(db, call.incident_id) if call.kind == "alert" and call.incident_id else None
+            text = alert_text(incident, self.settings.timezone) if incident else (call.message or "")
+        if not text.startswith(PRODUCT_NAME):
+            text = f"{PRODUCT_NAME} alert. {text}"
+        text += f" Please open the {PRODUCT_NAME} dashboard to respond."
+        log.warning("call=%d PUBLIC_BASE_URL is not a full https address: speak-only call, no keypresses", call_id)
+        say = f"<Say language={quoteattr(self.settings.call_language)}>{escape(text)}</Say>"
+        return f'<Response>{say}<Pause length="1"/>{say}</Response>'
 
     def _after_placed(self, call_id: int) -> None:
         """Alert calls go on the incident timeline as call_placed, and dashboards get the update."""

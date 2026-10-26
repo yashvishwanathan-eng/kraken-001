@@ -29,9 +29,10 @@ def test_ladders_use_the_onscreen_rule():
     s = get_settings()
     assert [(st.delay_s, st.action, st.who, st.defer_on_screen) for st in ladder_for("critical", s)] == [
         (0, "call", "head_guard", False), (0, "whatsapp", "admin", False),
-        (0, "call", "admin", True), (5, "call", "manager", True)]
+        (0, "call", "admin", True), (5, "call", "manager", True), (45, "alert_all", "guards", False)]
     assert [(st.delay_s, st.action, st.who, st.defer_on_screen) for st in ladder_for("high", s)] == [
-        (0, "call", "head_guard", False), (0, "whatsapp", "admin", False), (0, "call", "manager", True)]
+        (0, "call", "head_guard", False), (0, "whatsapp", "admin", False), (0, "call", "manager", True),
+        (0, "call", "admin", True), (45, "alert_all", "guards", False)]
 
 
 def test_admin_away_from_the_software_is_called_at_once(ladder, roster, monkeypatch):

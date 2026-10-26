@@ -48,14 +48,18 @@ def alert_all(message: str, *, by_name: str, user: User | None, channel: str,
         db.flush()
         contacts = on_shift_contacts(db)
         if incident is not None:
-            incident_ops.add_timeline(incident, "alert_all", by=by_name, via=via or VIA.get(channel))
+            # via="" means nobody pressed or said anything (the system raised it): no via on the timeline
+            incident_ops.add_timeline(incident, "alert_all", by=by_name,
+                                      via=VIA.get(channel) if via is None else (via or None))
         record(db, user, "alert_all", target=f"roll_call:{roll_call.id}", channel=channel, user_name=by_name,
                detail={"message": message, "recipients": len(contacts)})
         db.commit()
         roll_call_id, started_at = roll_call.id, roll_call.started_at
         incident_message = incident_ops.to_message(incident) if incident is not None else None
 
-    text = f"{PRODUCT_NAME} ALERT from {by_name}: {message} You will get a call: press 1 if responding, 2 if safe."
+    sender = "Nobody answered the alert calls." if by_name == PRODUCT_NAME else f"From {by_name}."
+    problem = message if message.startswith(PRODUCT_NAME) else f"{PRODUCT_NAME} ALERT: {message}"
+    text = f"{problem} {sender} You will get a call: press 1 if responding, 2 if safe."
     sent = whatsapp.send_many([(c.phone, text, None) for c in contacts])
     queued = 0
     for c in contacts:

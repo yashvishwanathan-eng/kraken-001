@@ -128,7 +128,8 @@ Routing by severity:
 - **High** (restricted entry in the day, unattended bag, crowding):
   - 0 s: call the Head Guard of that camera's group. WhatsApp the Admin.
   - 0 s: call the Manager (5 s if on screen).
-  - The Admin gets WhatsApp only, not a call.
+  - 0 s: call the Admin too (5 s if on screen). Changed 26 Oct (P27): the whole hierarchy is called.
+- **Nobody answered** (critical and high): still open after `NO_ANSWER_ALERT_ALL_S=45`: every guard on shift gets a WhatsApp and a roll-call phone call that says what happened (P27).
 - **Low** (ppe, loitering):
   - No calls.
   - WhatsApp to the zone manager: the Manager role delegated to that zone. Confirmed.
@@ -137,7 +138,7 @@ Routing by severity:
 
 Call mechanics:
 - Alert text is ready BEFORE dialling. Calls open in English with `<Say>` straight away. Tamil and Hindi are not used at the start of a call.
-- `<Gather input="speech dtmf">`: 1 = going (ack), 2 = false alarm, 3 = connect supervisor, 9 = repeat. Speech mapped to the same 4 intents (keyword match first, short Groq prompt as fallback).
+- `<Gather input="speech dtmf">`: 1 = going (ack), 2 = false alarm, 3 = alert all guards (with confirm), 4 = connect the manager, 9 = repeat (P27). Speech mapped to the same 4 intents (keyword match first, short Groq prompt as fallback).
 - Phone acknowledgements (keypad or voice) use the responder linked to the call. They never take the user from the request body.
 - **Critical**: voice and keypad can only ACKNOWLEDGE. Closing needs the dashboard.
 - **High**: the guard may mark false alarm (logged with name).

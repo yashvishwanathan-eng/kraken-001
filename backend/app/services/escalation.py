@@ -55,17 +55,21 @@ TYPE_LABELS = {
 @dataclass(frozen=True)
 class Step:
     delay_s: float
-    action: str  # call, whatsapp
-    who: str  # head_guard, admin, manager, zone_manager
+    action: str  # call, whatsapp, alert_all
+    who: str  # head_guard, admin, manager, zone_manager, guards
     defer_on_screen: bool = False  # the target has a dashboard open: wait ONSCREEN_GRACE_S before calling
 
 
 def ladder_for(severity: str, s: Settings) -> list[Step]:
+    # Critical and high call the whole hierarchy; if nobody has acknowledged after NO_ANSWER_ALERT_ALL_S,
+    # every guard on shift gets a WhatsApp and a call that tells them the problem (roll call).
+    nobody = Step(s.no_answer_alert_all_s, "alert_all", "guards")
     if severity == "critical":
         return [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"),
-                Step(0, "call", "admin", True), Step(s.onscreen_grace_s, "call", "manager", True)]
+                Step(0, "call", "admin", True), Step(s.onscreen_grace_s, "call", "manager", True), nobody]
     if severity == "high":
-        return [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"), Step(0, "call", "manager", True)]
+        return [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"), Step(0, "call", "manager", True),
+                Step(0, "call", "admin", True), nobody]
     return [Step(0, "whatsapp", "zone_manager")]
 
 
@@ -197,6 +201,9 @@ class Escalation:
                         db.commit()
                         manager.publish_from_thread(incident_ops.to_message(incident))
                 return
+            if step.action == "alert_all":
+                self._nobody_answered(db, incident)
+                return
             contacts, fallback = self._contacts(db, step.who, incident)
             if not contacts:
                 log.warning("incident=%d step=%d no %s with a phone number on the roster", incident_id, index,
@@ -234,6 +241,23 @@ class Escalation:
                 manager.publish_from_thread(incident_ops.to_message(incident))
         log.info("incident=%d step=%d action=%s who=%s ms=%.1f", incident_id, index, step.action, step.who,
                  (time.perf_counter() - t0) * 1000)
+
+    def _nobody_answered(self, db, incident: Incident) -> None:
+        """Still open after the whole ladder: alert every guard on shift, telling them what happened."""
+        from app.services import alerts  # alerts -> calls; imported here to keep the module graph simple
+
+        badge = incident_badge_status(db, incident) if incident.type == "access" else None
+        text = alert_text(incident, self.settings.timezone, badge)
+        incident_ops.add_timeline(incident, "nobody_answered")
+        db.commit()
+        manager.publish_from_thread(incident_ops.to_message(incident))
+        log.warning("incident=%d nobody acknowledged in %.0f s: alerting every guard on shift", incident.id,
+                    self.settings.no_answer_alert_all_s)
+        notice = alerts.alert_all(text, by_name=PRODUCT_NAME, user=None, channel="phone", incident_id=incident.id,
+                                  via="")
+        manager.publish_from_thread(notice)
+        if notice.get("incident"):
+            manager.publish_from_thread(notice["incident"])
 
     # ---------- low severity: repeated zone ----------
 

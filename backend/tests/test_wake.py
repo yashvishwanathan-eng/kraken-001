@@ -148,3 +148,55 @@ def test_audio_report_spots_quiet_and_clipped_recordings():
     assert "CLIPPED" in audio_report(np.full(16000, 32767, dtype=np.int16))
     wave_ = (np.sin(np.linspace(0, 400, 16000)) * 9000).astype(np.int16)
     assert audio_report(wave_).endswith("good")
+
+
+def test_heard_wake_needs_hey_then_friday():
+    from voice.wake import heard_wake
+
+    assert heard_wake("hey friday") and heard_wake("[unk] hey friday [unk]") and heard_wake("HEY FRIDAY")
+    assert not heard_wake("friday") and not heard_wake("friday hey") and not heard_wake("hey [unk] friday")
+
+
+class FakeRecognizer:
+    """Plays back a script of (final?, text) results, like Vosk's KaldiRecognizer."""
+
+    def __init__(self, script):
+        self.script = script
+
+    def AcceptWaveform(self, data):
+        assert len(data) == CHUNK_SAMPLES * 2
+        self.final, self.text = self.script.pop(0) if self.script else (False, "")
+        return self.final
+
+    def Result(self):
+        return f'{{"text": "{self.text}"}}'
+
+    def PartialResult(self):
+        return f'{{"partial": "{self.text}"}}'
+
+
+def test_vosk_wake_scores_one_on_hey_friday_and_starts_fresh():
+    from voice.wake import VoskWake
+
+    script = [(False, "hey"), (False, "hey friday"), (True, "hey friday")]
+    made = []
+
+    def factory():
+        made.append(FakeRecognizer(script))
+        return made[-1]
+
+    wake = VoskWake("any", recognizer_factory=factory)
+    chunk = np.zeros(CHUNK_SAMPLES, dtype=np.int16)
+    scores = [wake.predict(chunk)["hey_friday"] for _ in range(4)]
+    assert scores[:2] == [0.0, 1.0]
+    assert len(made) == 3  # a fresh recognizer after each trigger
+
+
+def test_auto_engine_uses_the_trained_file_when_it_exists(tmp_path):
+    from voice.wake import engine_for
+
+    model = tmp_path / "hey_friday.onnx"
+    assert engine_for(str(model), "auto") == "vosk"
+    model.write_bytes(b"onnx")
+    assert engine_for(str(model), "auto") == "onnx"
+    assert engine_for(str(model), "vosk") == "vosk"

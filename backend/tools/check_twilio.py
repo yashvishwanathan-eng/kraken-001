@@ -88,7 +88,10 @@ def main() -> int:
             line(WARN, f"{person.name} {tail(person.phone)} is NOT verified: Twilio will refuse to call them. "
                        "Console > Phone Numbers > Verified Caller IDs > Add")
 
-    if s.public_base_url:
+    if s.public_base_url and not s.public_base_url.startswith(("https://", "http://")):
+        line(BAD, "PUBLIC_BASE_URL must be the full https address ngrok shows, e.g. https://ab12-34.ngrok-free.app "
+                  "(calls only speak the problem until this is fixed: no keypresses or speech come back)")
+    elif s.public_base_url:
         url = s.public_base_url.rstrip("/") + "/twilio/status?call_id=0"
         try:
             reply = httpx.post(url, data={}, timeout=10)

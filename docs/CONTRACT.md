@@ -116,7 +116,7 @@ Status tags:
 - `status`: open, acknowledged, resolved, false_alarm
 - `channel`: dashboard, phone, voice
 - Timeline `action`:
-  - **(live)**: detected, call_placed, call_no_answer, escalated, whatsapp_sent, acknowledged, resolved, false_alarm, roll_call_responded, roll_call_safe, alert_all, duty_fallback (P23), call_skipped_on_screen (P25: someone on the dashboard reacted within the grace period, so their call was never placed; `to` = their name)
+  - **(live)**: detected, call_placed, call_no_answer, escalated, whatsapp_sent, acknowledged, resolved, false_alarm, roll_call_responded, roll_call_safe, alert_all, duty_fallback (P23), call_skipped_on_screen (P25: someone on the dashboard reacted within the grace period, so their call was never placed; `to` = their name), nobody_answered (P27: no acknowledgement after `NO_ANSWER_ALERT_ALL_S`; followed by `alert_all` with `by` = the product name and no `via`)
   - **(confirmed, not used yet)**: command
 - Timeline `via` (on acknowledged): keypad, voice, dashboard
 
@@ -163,6 +163,7 @@ Gate 2 needed these details, which the contract did not settle. The backend does
 
 ## Changelog
 - 26 Oct: P26 live: phone required when adding or inviting a person; people are on the call list automatically.
+- **P27. Whole hierarchy, then every guard (26 Oct, Kirito).** Critical and high both call Head Guard, Admin and Manager (high now also calls the Admin, after the Manager; the on-screen grace of P25 still applies). If the incident is still open after `NO_ANSWER_ALERT_ALL_S` (45 s), the timeline gets `nobody_answered` and every guard on shift is alerted (P3 roll call, WhatsApp + calls) with the incident's own alert text, so they hear what happened. Alert call keys: 1 = going (ack), 2 = false alarm (high only), 3 = alert all guards (users with `alert_all`, then press 1 to confirm), 4 = connect the manager (was 3), 9 = repeat. Alert all from the phone also sends the incident text. Without a full `PUBLIC_BASE_URL`, calls still go out and speak the alert text twice (no keypresses).
 - 26 Oct: P25 (first part) live: on-screen grace in the call ladder, `call_skipped_on_screen`, `POST /demo/incident`, action `run_demo`. Settings `CRITICAL_ADMIN_DELAY_S`, `CRITICAL_MANAGER_DELAY_S`, `HIGH_MANAGER_DELAY_S` replaced by `ONSCREEN_GRACE_S=5`.
 - 26 Oct: P22 (adding and installing cameras, camera numbers, roles, staff IDs), P23 (duty check-in by QR, off-duty guards not called, roster fallback with `duty_fallback`) and P24 (overview, activity log, data usage, voice summaries, Rumik voice) are live on the backend. Additive except: `UserCreate`/`InviteCreate` lists became optional. The frontend builds the screens.
 - 25 Oct: P21 added: sites and areas, guard profiles with encrypted personal details, badge scans, presence, and manager delegation. Endpoints are live.
