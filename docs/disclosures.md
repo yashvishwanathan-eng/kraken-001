@@ -75,3 +75,4 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 ## Wake word "Hey Friday" (guide ready, 26 Oct; training runs on Kirito's Colab)
 - openWakeWord (Apache-2.0 code): wake-word detection on the laptop. The ready-made "Hey Jarvis" stand-in model is CC BY-NC-SA 4.0 (non-commercial).
 - Google Colab (free T4 GPU) runs openWakeWord's `automatic_model_training.ipynb` to train `hey_friday.onnx` (guide: `backend/tools/wake_training/README.md`). Training data: synthetic "hey friday" clips from piper-sample-generator (LibriTTS-R voice model) mixed with AudioSet, Free Music Archive and ACAV100M background audio/features; their own licences apply. No recordings of real people are used.
+- Browser text to speech (Web Speech API, voices installed on the laptop): Friday's fallback voice when Rumik is not set up or does not answer; a female voice (e.g. Microsoft Heera or Zira) is picked by name.

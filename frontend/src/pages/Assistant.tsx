@@ -118,6 +118,11 @@ export function AssistantPage() {
           </div>
         )}
         {friday.error && <p className="mt-3 text-xs" style={{ color: 'var(--critical)' }}>{friday.error}</p>}
+        {friday.voice && (
+          <p className="mt-3 font-mono text-[10px] text-[var(--text-muted)]" title={friday.voice === 'Rumik Silk' ? '' : 'Rumik is not set up or did not answer: set RUMIK_API_KEY and RUMIK_GATEWAY_URL, then run python -m tools.check_rumik'}>
+            Voice: {friday.voice}{friday.voice === 'Rumik Silk' ? '' : ' (Rumik not reachable)'}
+          </p>
+        )}
       </section>
 
       <form

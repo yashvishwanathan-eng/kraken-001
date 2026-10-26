@@ -32,9 +32,10 @@ interface Snapshot {
   turns: FridayTurn[]
   error: string | null
   cameraIds: string[] | null // "show cameras 3, 4 and 12": the page switches to them
+  voice: string | null // who spoke last: "Rumik Silk" or the browser voice's name
 }
 
-let snap: Snapshot = { state: 'idle', heard: '', answer: '', confirmToken: null, turns: [], error: null, cameraIds: null }
+let snap: Snapshot = { state: 'idle', heard: '', answer: '', confirmToken: null, turns: [], error: null, cameraIds: null, voice: null }
 const listeners = new Set<() => void>()
 function set(patch: Partial<Snapshot>) {
   snap = { ...snap, ...patch }
@@ -87,13 +88,35 @@ function stopSpeaking() {
   window.speechSynthesis?.cancel()
 }
 
+// Friday is a woman's voice. Windows, Chrome and Edge name their voices, so pick by name (Indian English first)
+// and never fall back to a male one (Ravi, David, Mark, Prabhat...).
+const FEMALE = /heera|neerja|swara|kalpana|zira|aria|jenny|sonia|libby|natasha|samantha|karen|moira|tessa|veena|female|woman/i
+const MALE = /ravi|prabhat|david|mark|guy|ryan|george|daniel|alex|fred|male(?!.*female)/i
+
+async function browserVoices(): Promise<SpeechSynthesisVoice[]> {
+  const now = window.speechSynthesis.getVoices()
+  if (now.length) return now
+  return new Promise(resolve => {  // Chrome loads the list a moment after the page
+    const done = () => resolve(window.speechSynthesis.getVoices())
+    window.speechSynthesis.addEventListener('voiceschanged', done, { once: true })
+    window.setTimeout(done, 800)
+  })
+}
+
+export function pickFemaleVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
+  const english = voices.filter(v => /^en/i.test(v.lang))
+  const female = english.filter(v => FEMALE.test(v.name) && !/male(?!.*female)/i.test(v.name.replace(/female/gi, '')))
+  return female.find(v => /en-IN/i.test(v.lang)) ?? female[0] ?? english.find(v => !MALE.test(v.name)) ?? null
+}
+
 async function speakWithBrowser(text: string): Promise<void> {
   if (!('speechSynthesis' in window)) return
+  const voice = pickFemaleVoice(await browserVoices())
+  set({ voice: voice ? `browser voice: ${voice.name}` : 'browser voice' })
   await new Promise<void>(resolve => {
     const u = new SpeechSynthesisUtterance(text)
-    const voices = window.speechSynthesis.getVoices()
-    u.voice = voices.find(v => /en-IN/i.test(v.lang) && /female|woman|heera|swara/i.test(v.name))
-      ?? voices.find(v => /en-IN/i.test(v.lang)) ?? voices.find(v => /en/i.test(v.lang)) ?? null
+    u.voice = voice
+    if (!voice) u.pitch = 1.25 // no named female voice installed: at least a higher pitch
     u.rate = 1.05
     u.onboundary = () => (pulse = 0.75)
     const tick = window.setInterval(() => (pulse = Math.max(pulse, 0.25 + Math.random() * 0.25)), 120)
@@ -117,6 +140,7 @@ export async function speak(text: string): Promise<void> {
       body: JSON.stringify({ text }),
     })
     if (!res.ok) throw new Error(`speak ${res.status}`)
+    set({ voice: 'Rumik Silk' })
     await playAudio(await res.arrayBuffer())
   } catch {
     analyser = null

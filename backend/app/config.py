@@ -54,8 +54,9 @@ class Settings(BaseSettings):
     fire_model_path: str = ""  # fire/smoke model (.pt); empty = fire rule off until a model is chosen
     rumik_api_key: str = ""  # secret: Rumik Silk text to speech (the assistant's spoken replies)
     rumik_gateway_url: str = ""  # the gateway address shown in the Rumik dashboard (playground.rumik.ai)
-    rumik_model: str = "muga"  # muga or mulberry
+    rumik_model: str = "mulberry"  # mulberry (takes a voice description) or muga
     rumik_speaker: str = ""  # a preset voice (mulberry); empty = Rumik's default
+    rumik_description: str = "warm, clear Indian woman, calm and confident"  # mulberry only: Friday's voice in words
     rumik_timeout_s: float = 8.0
     friday_user: str = ""  # the wake-word listener acts as this user (their name), e.g. Anita Rao
     voice_silence_s: float = 1.0  # stop recording after this much quiet once you have started talking

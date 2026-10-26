@@ -35,6 +35,8 @@ def speak(text: str) -> tuple[bytes, int]:
     body = {"text": text, "model": s.rumik_model}
     if s.rumik_speaker:
         body["speaker"] = s.rumik_speaker
+    if s.rumik_description and s.rumik_model == "mulberry":
+        body["description"] = s.rumik_description  # e.g. a female voice described in words
     url = f"{s.rumik_gateway_url.rstrip('/')}/v1/tts"
     headers = {"Authorization": f"Bearer {s.rumik_api_key}", "Content-Type": "application/json"}
     t0 = time.perf_counter()

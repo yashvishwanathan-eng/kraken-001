@@ -365,7 +365,9 @@ def test_tts_calls_rumik_and_reports_failures(monkeypatch):
     monkeypatch.setattr(tts.httpx, "post", ok)
     audio, _ = tts.speak("Yes, boss.")
     assert audio.startswith(b"RIFF")
-    assert seen == [("https://gateway.example/v1/tts", {"text": "Yes, boss.", "model": "muga"}, "Bearer k")]
+    assert seen == [("https://gateway.example/v1/tts", {"text": "Yes, boss.", "model": "mulberry",
+                                                     "description": "warm, clear Indian woman, calm and confident"},
+                      "Bearer k")]
 
     monkeypatch.setattr(tts.httpx, "post", lambda *a, **k: FakeResponse(401, text="bad key"))
     with pytest.raises(tts.TtsUnavailable, match="refused the key"):
@@ -376,3 +378,15 @@ def test_speak_endpoint_says_503_without_rumik(roster, monkeypatch):
     monkeypatch.setattr(get_settings(), "rumik_api_key", "")
     out = client.post("/assistant/speak", json={"text": "hello"}, headers=login(client, ADMIN))
     assert out.status_code == 503
+
+
+def test_tts_sends_the_voice_description_for_a_female_voice(monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "rumik_api_key", "k")
+    monkeypatch.setattr(s, "rumik_gateway_url", "https://gateway.example")
+    monkeypatch.setattr(s, "rumik_model", "mulberry")
+    monkeypatch.setattr(s, "rumik_description", "calm, clear Indian woman")
+    seen = []
+    monkeypatch.setattr(tts.httpx, "post", lambda url, json, headers, timeout: seen.append(json) or FakeResponse(200, b"RIFF"))
+    tts.speak("Yes, boss.")
+    assert seen[0] == {"text": "Yes, boss.", "model": "mulberry", "description": "calm, clear Indian woman"}

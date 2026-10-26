@@ -23,6 +23,8 @@ def main() -> int:
     print(f"RUMIK_API_KEY:     {key}")
     print(f"RUMIK_GATEWAY_URL: {s.rumik_gateway_url or 'MISSING (copy it from the Rumik dashboard)'}")
     print(f"RUMIK_MODEL:       {s.rumik_model}")
+    print(f"RUMIK_SPEAKER:     {s.rumik_speaker or '(Rumik default)'}")
+    print(f"RUMIK_DESCRIPTION: {s.rumik_description or '(none)'}")
     try:
         audio, ms = tts.speak(args.text)
     except tts.TtsUnavailable as exc:
