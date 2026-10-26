@@ -14,7 +14,7 @@ import { deleteFace, enrollFace, getFace, getRestrictedZones, setAccess, type Pe
 
 const SHOTS = 5
 
-export function FaceAccessModal({ person, onClose }: { person: Person; onClose: () => void }) {
+export function FaceAccessModal({ person, onClose }: { person: Pick<Person, 'id' | 'name'>; onClose: () => void }) {
   const qc = useQueryClient()
   const status = useQuery({ queryKey: ['face', person.id], queryFn: () => getFace(person.id) })
   const zones = useQuery({ queryKey: ['restricted-zones'], queryFn: getRestrictedZones })

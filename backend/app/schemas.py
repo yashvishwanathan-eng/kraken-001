@@ -903,3 +903,39 @@ class FaceEnrollOut(FaceStatusOut):
 
 class AccessIn(BaseModel):
     zone_ids: list[int] = Field(default_factory=list, max_length=200)
+
+
+# ---------- restricted areas (P35) ----------
+
+class RestrictedPerson(BaseModel):
+    id: int
+    name: str
+    role: str
+    face_samples: int  # face fingerprints enrolled; 0 = their face is not known, so they always raise an alert
+
+
+class RestrictedArea(BaseModel):
+    zone_id: int
+    name: str
+    whole_camera: bool  # True: the whole picture is restricted (made on the Restricted areas page)
+    allowed_user_ids: list[int]
+
+
+class RestrictedCamera(BaseModel):
+    id: str
+    name: str
+    number: int | None
+    areas: list[RestrictedArea]  # empty = this camera is not restricted
+
+
+class RestrictedOverview(BaseModel):
+    cameras: list[RestrictedCamera]
+    people: list[RestrictedPerson]
+
+
+class RestrictCameraIn(BaseModel):
+    camera_id: Annotated[str, Field(min_length=1, max_length=64)]
+
+
+class AllowedPeopleIn(BaseModel):
+    user_ids: list[int] = Field(default_factory=list, max_length=500)

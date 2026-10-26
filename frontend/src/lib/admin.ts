@@ -341,3 +341,23 @@ export function enrollFace(userId: number, photos: Blob[]) {
   form.append('consent', 'true')
   return http.form<FaceStatus & { added: number; rejected: string[] }>(`/users/${userId}/face`, form)
 }
+
+/* ── Restricted areas (P35) ────────────────────────────── */
+
+export interface RestrictedArea {
+  zone_id: number
+  name: string
+  whole_camera: boolean
+  allowed_user_ids: number[]
+}
+
+export interface RestrictedOverview {
+  cameras: { id: string; name: string; number: number | null; areas: RestrictedArea[] }[]
+  people: { id: number; name: string; role: string; face_samples: number }[]
+}
+
+export const getRestricted = () => http.get<RestrictedOverview>('/restricted')
+export const restrictCamera = (cameraId: string) => http.post<RestrictedArea>('/restricted', { camera_id: cameraId })
+export const setAllowedPeople = (zoneId: number, userIds: number[]) =>
+  http.put<RestrictedArea>(`/restricted/${zoneId}/people`, { user_ids: userIds })
+export const unrestrict = (zoneId: number) => http.del<void>(`/restricted/${zoneId}`)

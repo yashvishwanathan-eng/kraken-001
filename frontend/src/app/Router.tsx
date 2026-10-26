@@ -18,6 +18,7 @@ import { DutyPage }           from '@/pages/Duty'
 import { LogsPage }           from '@/pages/Logs'
 import { RecordingsPage }     from '@/pages/Recordings'
 import { ConversationsPage }  from '@/pages/Conversations'
+import { RestrictedPage }     from '@/pages/Restricted'
 import { useAuth }            from '@/lib/auth'
 
 function ProtectedLayout() {
@@ -45,6 +46,7 @@ export function Router() {
         <Route path="/duty"            element={<DutyPage />} />
         <Route path="/cameras"         element={<CamerasPage />} />
         <Route path="/zones"           element={<ZonesPage />} />
+        <Route path="/restricted"      element={<RestrictedPage />} />
         <Route path="/logs"            element={<LogsPage />} />
         {/* old addresses */}
         <Route path="/overview"        element={<Navigate to="/dashboard" replace />} />

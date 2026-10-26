@@ -11,8 +11,8 @@ from fastapi.staticfiles import StaticFiles
 from app.config import PRODUCT_NAME, get_settings, media_root
 from app.routers import (
     activity, assistant, audit, auth, badges, broadcast, cameras, conversations, demo, duty, events, faces, friday,
-    guards, health, internal, invites, overview, recordings, responders, roles, roll_call, share, sites, stats,
-    stream, summary, twilio, users, zones,
+    guards, health, internal, invites, overview, recordings, responders, restricted, roles, roll_call, share, sites,
+    stats, stream, summary, twilio, users, zones,
 )
 from app.services.calls import calls
 from app.services.escalation import escalation
@@ -77,5 +77,5 @@ app.mount("/media", StaticFiles(directory=media_root()), name="media")
 
 for module in (health, auth, users, cameras, stream, zones, events, stats, audit, responders, roll_call, broadcast,
                assistant, twilio, share, internal, invites, summary, sites, guards, badges, roles, duty, overview,
-               activity, demo, friday, recordings, conversations, faces):
+               activity, demo, friday, recordings, conversations, faces, restricted):
     app.include_router(module.router)

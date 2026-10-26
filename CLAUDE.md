@@ -40,7 +40,7 @@ backend/
     ws.py              WebSocket connection manager
     deps.py            FastAPI dependencies: current_user (401) and require(action) (403)
     seed.py            python -m app.seed: loads cameras.yaml + zones.yaml (+ demo users) into the database; safe to rerun
-    routers/           health, cameras, stream, events, zones, responders, broadcast, assistant, stats, twilio, internal, auth, users, roll_call (/alerts/all + /roll-call), audit, share (signed media for WhatsApp/Twilio), roles, duty (QR check-in), overview (+ /usage), activity
+    routers/           health, cameras, stream, events, zones, responders, broadcast, assistant, stats, twilio, internal, auth, users, roll_call (/alerts/all + /roll-call), audit, share (signed media for WhatsApp/Twilio), roles, duty (QR check-in), overview (+ /usage), activity, restricted (restricted cameras + who may enter, P35)
     services/          escalation.py (ladders, digest, heartbeat watchdog), calls.py (Twilio + 1/s queue), whatsapp.py, alerts.py (alert everybody, roll call),
                        incidents.py (ack/close shared by dashboard, phone, assistant), directory.py (who to call), assistant.py (question -> filter -> answer),
                        commands.py (laptop commands + confirm), knowledge.py (SOP answers), llm.py (Groq -> Ollama), stt.py (Groq Whisper -> faster-whisper),

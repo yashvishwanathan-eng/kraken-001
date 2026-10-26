@@ -173,6 +173,20 @@ class LiveView:
                 log.exception("live view frame failed")
 
 
+def start_faces(camera_id: str, zones: list[ZoneDef]) -> "FaceWatcher | None":
+    """Face recognition for a camera that has a restricted area; None when it has none (or the models are missing)."""
+    if not any(z.kind == "restricted" for z in zones):
+        return None
+    try:
+        watcher = FaceWatcher()
+        watcher.bank = load_face_bank() or watcher.bank
+        log.info("camera %s: face recognition on, %d fingerprints enrolled", camera_id, len(watcher.bank))
+        return watcher
+    except Exception:  # model download failed (offline first run): restricted zones still alert as before
+        log.warning("camera %s: face recognition off (models not available)", camera_id, exc_info=True)
+        return None
+
+
 def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     settings = get_settings()
     cameras = {cam.id: cam for cam in all_cameras()}  # database first (dashboard-added cameras), then yaml
@@ -199,14 +213,7 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
             extra.warm_up()
 
     zones = load_zones(camera.id) or []
-    faces_on = None
-    if settings.face_enabled and any(z.kind == "restricted" for z in zones):
-        try:
-            faces_on = FaceWatcher()
-            faces_on.bank = load_face_bank() or faces_on.bank
-            log.info("camera %s: face recognition on, %d fingerprints enrolled", camera.id, len(faces_on.bank))
-        except Exception:  # model download failed (offline first run): restricted zones still alert as before
-            log.warning("camera %s: face recognition off (models not available)", camera.id, exc_info=True)
+    faces_on = start_faces(camera.id, zones) if settings.face_enabled else None
     engine = RulesEngine(zones, RuleConfig.from_settings(settings))
     ring = RingBuffer(settings.ring_buffer_s, settings.ring_max_width)
     reporter = IncidentReporter(camera.id, settings, ring)
@@ -251,6 +258,8 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
                     view.zones = zones
                 if faces_on is not None:  # newly enrolled faces count within ZONE_REFRESH_S
                     faces_on.bank = load_face_bank() or faces_on.bank
+                elif settings.face_enabled:  # a restricted area was just added to this camera (Restricted areas page)
+                    faces_on = start_faces(camera.id, zones)
                 last_zone_refresh = now
 
             t0 = time.perf_counter()

@@ -14,6 +14,7 @@ import {
   Sparkles,
   Users,
   MapPin,
+  Lock,
   Shield,
   ShieldCheck,
   Video,
@@ -85,6 +86,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { to: '/cameras', icon: Camera, label: 'Cameras', needs: ['manage_cameras'] },
       { to: '/zones', icon: MapPin, label: 'Zones', needs: ['manage_zones'] },
+      { to: '/restricted', icon: Lock, label: 'Restricted areas', needs: ['manage_users'] },
       { to: '/conversations', icon: MessagesSquare, label: 'Conversations', needs: ['view_audit'] },
       { to: '/logs', icon: ScrollText, label: 'Logs', needs: ['view_audit'] },
     ],
