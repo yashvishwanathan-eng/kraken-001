@@ -368,13 +368,13 @@ def _open_conversation(db, call: Call) -> Response:
     conv = call_agent.start(call, incident)
     opening = conv.history[0]["content"]
     conversations.call_turn(call.id, "friday", opening)
-    return twiml(listen(call.id, say(opening, call_agent.style_for(conv.kind))))
+    return twiml(listen(call.id, say(opening, call_agent.style_for(conv.kind, conv.severity))))
 
 
 def _answer(call_id: int, turn: call_agent.Turn) -> Response:
     """Speak Friday's turn, then: put the call through, hang up, or listen again."""
     conv = call_agent.get(call_id)
-    style = call_agent.style_for(conv.kind) if conv is not None else "calm"
+    style = call_agent.style_for(conv.kind, conv.severity) if conv is not None else "calm"
     if conv is not None:
         call_agent.remember_reply(conv, turn.reply)
     if turn.dial_phone:
@@ -488,7 +488,8 @@ def _think(call_id: int, said: str, digits: str) -> None:
         conversations.call_turn(call_id, "person", said or f"(pressed {digits[:1]})")
         turn = call_agent.decide(conv, said, digits)
         turn = _carry_out(call_id, conv, turn, said, "keypad" if digits else "voice")
-        call_voice.audio_link(turn.reply, call_agent.style_for(conv.kind))  # made now, while the filler plays
+        # her answer in the Rumik voice, made now while the filler plays
+        call_voice.audio_link(turn.reply, call_agent.style_for(conv.kind, conv.severity))
         conversations.call_turn(call_id, "friday", turn.reply,
                                 None if turn.action in ("none", "connect") else turn.action)
     except Exception:
@@ -522,7 +523,7 @@ async def talk(request: Request, call_id: int) -> Response:
     if await run_in_threadpool(conv.ready.wait, TALK_WAIT_S):
         return await run_in_threadpool(_answer, call_id, conv.pending)
     filler = call_agent.FILLERS[conv.turns % len(call_agent.FILLERS)]
-    style = call_agent.style_for(conv.kind)
+    style = call_agent.style_for(conv.kind, conv.severity)
     nxt = escape(url(f"/twilio/next?call_id={call_id}"))
     return twiml(await run_in_threadpool(say, filler, style), f'<Redirect method="POST">{nxt}</Redirect>')
 

@@ -79,10 +79,16 @@ class RuleConfig:
     track_grace_s: float = 1.0
     ppe_missing_frames: int = 10
     fire_frames: int = 5
+    smoke_frames: int = 5
+    no_helmet_frames: int = 4
     extra_model_conf: float = 0.5
+    fire_conf: float = 0.35  # a lighter's small flame scores lower than a big fire
     helmet_labels: tuple[str, ...] = ("helmet", "hardhat", "hard-hat")
     vest_labels: tuple[str, ...] = ("vest", "safety-vest", "safety vest")
-    fire_labels: tuple[str, ...] = ("fire", "smoke")
+    fire_labels: tuple[str, ...] = ("fire", "flame")
+    smoke_labels: tuple[str, ...] = ("smoke",)
+    no_helmet_labels: tuple[str, ...] = ("without helmet", "without_helmet", "no helmet", "no-helmet", "no_helmet",
+                                         "nohelmet", "without-helmet")
     night_start: time = time(20, 0)
     night_end: time = time(6, 0)
     timezone: str = "Asia/Kolkata"
@@ -95,8 +101,11 @@ class RuleConfig:
             fall_hip_drop=s.fall_hip_drop, fall_down_s=s.fall_down_s, unattended_s=s.unattended_s,
             bag_still_frac=s.bag_still_frac, bag_reach_frac=s.bag_reach_frac,
             track_grace_s=s.track_grace_s, ppe_missing_frames=s.ppe_missing_frames, fire_frames=s.fire_frames,
-            extra_model_conf=s.detect_conf, helmet_labels=labels(s.ppe_helmet_labels), vest_labels=labels(s.ppe_vest_labels),
-            fire_labels=labels(s.fire_labels), night_start=parse_hhmm(s.night_start),
+            smoke_frames=s.smoke_frames, no_helmet_frames=s.no_helmet_frames, fire_conf=s.fire_conf,
+            extra_model_conf=s.detect_conf, helmet_labels=labels(s.ppe_helmet_labels),
+            vest_labels=labels(s.ppe_vest_labels), fire_labels=labels(s.fire_labels),
+            smoke_labels=labels(s.smoke_labels), no_helmet_labels=labels(s.no_helmet_labels),
+            night_start=parse_hhmm(s.night_start),
             night_end=parse_hhmm(s.night_end), timezone=s.timezone,
         )
 
@@ -205,7 +214,7 @@ class RulesEngine:
         self._bags: list[_BagState] = []
         self._last_fired: dict[str, float] = {}
         self._ppe_missing: dict[int, int] = {}  # track -> consecutive analysed frames without helmet/vest
-        self._fire_streak = 0  # consecutive analysed frames with fire or smoke
+        self._streaks = {"fire": 0, "smoke": 0, "no_helmet": 0}  # consecutive analysed frames with each
 
     def set_zones(self, zones: list[ZoneDef]) -> None:
         self.zones = zones
@@ -220,10 +229,11 @@ class RulesEngine:
         bags: list[BagObs] | None = None,
         ppe: list[DetectionObs] | None = None,
         fire: list[DetectionObs] | None = None,
+        riders: list[DetectionObs] | None = None,
     ) -> list[Candidate]:
         """Feed one analysed frame. `t` is a monotonic clock in seconds.
 
-        `bags`, `ppe` and `fire` are None when that model did not run on this frame (or is not installed),
+        `bags`, `ppe`, `fire` and `riders` (helmet model) are None when that model did not run on this frame (or is not installed),
         which leaves its counters untouched.
         """
         cfg = self.cfg
@@ -272,6 +282,8 @@ class RulesEngine:
             found.extend(self._update_ppe(people, zones_of, ppe))
         if fire is not None:
             found.extend(self._update_fire(frame_w, frame_h, fire))
+        if riders is not None:
+            found.extend(self._update_no_helmet(frame_w, frame_h, riders))
 
         for timers in (self._access, self._loiter, self._down):
             timers.prune(t, cfg.track_grace_s)
@@ -367,21 +379,36 @@ class RulesEngine:
         self._ppe_missing = {k: v for k, v in self._ppe_missing.items() if k in seen}
         return found
 
-    def _update_fire(self, frame_w: int, frame_h: int, detections: list[DetectionObs]) -> list[Candidate]:
-        """Fire or smoke in N consecutive analysed frames (confidence at least the threshold)."""
-        cfg = self.cfg
-        flames = [d for d in detections if d.label in cfg.fire_labels and d.confidence >= cfg.extra_model_conf]
-        if not flames:
-            self._fire_streak = 0
+    def _streak(self, kind: str, severity: str, needed: int, conf: float, labels_: tuple[str, ...],
+                frame_w: int, frame_h: int, detections: list[DetectionObs]) -> list[Candidate]:
+        """One kind of thing seen in N consecutive analysed frames (confidence at least `conf`) -> a candidate."""
+        seen = [d for d in detections if d.label in labels_ and d.confidence >= conf]
+        if not seen:
+            self._streaks[kind] = 0
             return []
-        self._fire_streak += 1
-        if self._fire_streak < cfg.fire_frames:
+        self._streaks[kind] += 1
+        if self._streaks[kind] < needed:
             return []
-        strongest = max(flames, key=lambda d: d.confidence)
+        strongest = max(seen, key=lambda d: d.confidence)
         spot = feet_point(strongest.box, frame_w, frame_h)
         zone = next((z.name for z in self.zones if point_in_polygon(spot, z.polygon)), None)
-        return [Candidate("fire", "critical", zone, strongest.confidence, (),
-                          f"{strongest.label} in {self._fire_streak} frames in a row")]
+        return [Candidate(kind, severity, zone, strongest.confidence, (),
+                          f"{strongest.label} in {self._streaks[kind]} frames in a row")]
+
+    def _update_fire(self, frame_w: int, frame_h: int, detections: list[DetectionObs]) -> list[Candidate]:
+        """Fire (critical) and smoke (high) are separate incidents, each needing N frames in a row. Flames use a
+        lower confidence (FIRE_CONF) because a small flame, like a lighter, scores lower than a big fire."""
+        cfg = self.cfg
+        return (self._streak("fire", "critical", cfg.fire_frames, cfg.fire_conf, cfg.fire_labels,
+                             frame_w, frame_h, detections)
+                + self._streak("smoke", "high", cfg.smoke_frames, cfg.extra_model_conf, cfg.smoke_labels,
+                               frame_w, frame_h, detections))
+
+    def _update_no_helmet(self, frame_w: int, frame_h: int, detections: list[DetectionObs]) -> list[Candidate]:
+        """A rider without a helmet (helmet model) in N frames in a row; the gate guard of this camera is called."""
+        cfg = self.cfg
+        return self._streak("no_helmet", "low", cfg.no_helmet_frames, cfg.extra_model_conf, cfg.no_helmet_labels,
+                            frame_w, frame_h, detections)
 
     def _apply_cooldown(self, t: float, found: list[Candidate]) -> list[Candidate]:
         """Same camera + type cannot fire again within the cooldown. One worker = one camera."""

@@ -34,9 +34,10 @@ interface Snapshot {
   cameraIds: string[] | null // "show cameras 3, 4 and 12": the page switches to them
   openPath: string | null // "show the recording of the fire": the page to open (an incident, recordings)
   voice: string | null // who spoke last: "Rumik Silk" or the browser voice's name
+  alarmRgb: string // "r,g,b" of the current alarm: orange for fire, grey for smoke, red otherwise
 }
 
-let snap: Snapshot = { state: 'idle', heard: '', answer: '', confirmToken: null, turns: [], error: null, cameraIds: null, openPath: null, voice: null }
+let snap: Snapshot = { state: 'idle', heard: '', answer: '', confirmToken: null, turns: [], error: null, cameraIds: null, openPath: null, voice: null, alarmRgb: '239,68,68' }
 const listeners = new Set<() => void>()
 function set(patch: Partial<Snapshot>) {
   snap = { ...snap, ...patch }
@@ -267,7 +268,7 @@ async function answered(said: string, out: { intent?: string; status?: string; a
 
 /* ── from the wake-word listener and alarms (WebSocket "friday" notices) ── */
 
-export function showState(state: FridayState, fields: { heard?: string; answer?: string } = {}): void {
+export function showState(state: FridayState, fields: { heard?: string; answer?: string; alarmRgb?: string } = {}): void {
   set({ state, ...fields })
 }
 

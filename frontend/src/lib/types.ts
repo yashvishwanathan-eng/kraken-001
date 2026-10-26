@@ -72,6 +72,8 @@ export type IncidentType =
   | 'ppe'
   | 'fall'
   | 'fire'
+  | 'smoke'
+  | 'no_helmet'
   | 'unattended'
   | 'loitering'
   | 'crowding'

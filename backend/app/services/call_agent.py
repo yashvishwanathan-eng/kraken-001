@@ -31,7 +31,8 @@ log = logging.getLogger("safetyai.call_agent")
 
 MAX_TURNS = 8
 SITUATION = {
-    "fire": "there's a fire", "fall": "someone has fallen and isn't getting up",
+    "fire": "there's a fire", "smoke": "there's smoke", "no_helmet": "a rider just came in without a helmet",
+    "fall": "someone has fallen and isn't getting up",
     "access": "someone has walked into the restricted area", "unattended": "a bag has been left unattended",
     "crowding": "it's getting too crowded", "ppe": "someone is working without a helmet or vest",
     "loitering": "someone has been hanging around for a while",
@@ -134,9 +135,10 @@ def situation(incident: Incident) -> str:
     return f"{what[0].upper()}{what[1:]} at {place(incident)}."
 
 
-def style_for(kind: str) -> str:
-    """Alerts and roll calls are emergencies: urgent voice. A plain "call Yash" stays calm."""
-    return "calm" if kind == "direct" else "urgent"
+def style_for(kind: str, severity: str = "") -> str:
+    """Alerts and roll calls are emergencies: urgent voice. A plain "call Yash" or a low one (a rider without a
+    helmet) stays calm."""
+    return "calm" if kind == "direct" or severity == "low" else "urgent"
 
 
 def ack_reply(first: str) -> str:
@@ -146,6 +148,9 @@ def ack_reply(first: str) -> str:
 def opening(call: Call, incident: Incident | None) -> str:
     """The first thing Friday says. No times or ids in it, so the audio can be made before they pick up."""
     name = first_name(call.to_name)
+    if call.kind == "alert" and incident is not None and incident.type == "no_helmet":
+        return (f"{name}, it's Friday from {PRODUCT_NAME}. {situation(incident)} Please stop them and ask them to "
+                "wear a helmet. Can you do that?")
     if call.kind == "alert" and incident is not None:
         return f"{name}, it's Friday from {PRODUCT_NAME}. {situation(incident)[:-1]}, right now! Where are you?"
     if call.kind == "roll_call":

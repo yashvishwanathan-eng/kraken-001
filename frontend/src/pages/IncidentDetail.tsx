@@ -8,6 +8,7 @@ import { Link, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/PageHeader'
 import { SeverityBadge } from '@/components/SeverityBadge'
+import { typeLabel } from '@/lib/incidentLook'
 import { StatusChip } from '@/components/StatusChip'
 import { Button, ErrorLine, Tile, TZ } from '@/components/admin/kit'
 import { RecordingPlayer } from '@/components/recordings/RecordingPlayer'
@@ -51,9 +52,9 @@ export function IncidentDetailPage() {
   return (
     <div className="mx-auto w-full max-w-[1180px]">
       <PageHeader
-        title={`Incident #${incident.id}: ${incident.type}`}
+        title={`Incident #${incident.id}: ${typeLabel(incident.type)}`}
         description={`${incident.camera_name}${incident.zone ? ` · ${incident.zone.replace(/-/g, ' ')}` : ''} · ${new Date(incident.started_at).toLocaleString('en-IN', { timeZone: TZ })}`}
-        actions={<div className="flex items-center gap-2"><SeverityBadge severity={incident.severity} /><StatusChip status={incident.status} /></div>}
+        actions={<div className="flex items-center gap-2"><SeverityBadge severity={incident.severity} type={incident.type} /><StatusChip status={incident.status} /></div>}
       />
       <div className="grid gap-3 lg:grid-cols-3">
         <Tile title="Clip and snapshot" className="lg:col-span-2">

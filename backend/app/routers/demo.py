@@ -25,7 +25,7 @@ from worker.rules import is_night, parse_hhmm
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 
-SEVERITY = {"fire": "critical", "fall": "critical", "access": "high", "unattended": "high", "crowding": "high",
+SEVERITY = {"fire": "critical", "smoke": "high", "no_helmet": "low", "fall": "critical", "access": "high", "unattended": "high", "crowding": "high",
             "ppe": "low", "loitering": "low"}
 ZONE_KIND = {"access": "restricted", "ppe": "ppe"}  # which zone of the camera fits the type
 

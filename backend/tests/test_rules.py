@@ -175,3 +175,34 @@ def test_owner_returning_resets_the_unattended_timer():
     frames += [(t, [], [BAG]) for t in every(1.0, 42, 110)]
     fired = run(engine(), frames)
     assert [t for t, _ in fired] == [102.0]  # alone again from t=42, so 60 s later
+
+
+def test_fire_and_smoke_are_separate_and_a_small_flame_counts():
+    from worker.rules import DetectionObs, RuleConfig, RulesEngine
+
+    engine = RulesEngine([], RuleConfig(fire_frames=3, smoke_frames=3, cooldown_s=60))
+    lighter = [DetectionObs((300, 200, 320, 240), "fire", 0.4)]  # small flame, 0.4: above FIRE_CONF (0.35)
+    found = []
+    for i in range(3):
+        found += engine.update(float(i), datetime(2026, 10, 26, 10, 0, tzinfo=timezone.utc), 640, 480, [],
+                               fire=lighter)
+    assert [(c.type, c.severity) for c in found] == [("fire", "critical")]
+    smoke = [DetectionObs((100, 50, 400, 300), "smoke", 0.7)]
+    found = []
+    for i in range(3):
+        found += engine.update(10.0 + i, datetime(2026, 10, 26, 10, 0, tzinfo=timezone.utc), 640, 480, [],
+                               fire=smoke)
+    assert [(c.type, c.severity) for c in found] == [("smoke", "high")]
+
+
+def test_rider_without_a_helmet():
+    from worker.rules import DetectionObs, RuleConfig, RulesEngine
+
+    engine = RulesEngine([], RuleConfig(no_helmet_frames=2))
+    rider = [DetectionObs((300, 100, 360, 160), "Without Helmet".lower(), 0.8)]
+    with_helmet = [DetectionObs((300, 100, 360, 160), "with helmet", 0.9)]
+    now = datetime(2026, 10, 26, 10, 0, tzinfo=timezone.utc)
+    assert engine.update(0.0, now, 640, 480, [], riders=with_helmet) == []
+    assert engine.update(1.0, now, 640, 480, [], riders=rider) == []
+    found = engine.update(2.0, now, 640, 480, [], riders=rider)
+    assert [(c.type, c.severity) for c in found] == [("no_helmet", "low")]

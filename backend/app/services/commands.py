@@ -350,7 +350,8 @@ def _status_report(user: User) -> str:
             f". {len(online)} of {len(cameras)} cameras online.")
 
 
-RECORDING_TYPES = {"fire": "fire", "smoke": "fire", "fall": "fall", "fell": "fall", "bag": "unattended",
+RECORDING_TYPES = {"fire": "fire", "smoke": "smoke", "rider": "no_helmet", "without a helmet": "no_helmet",
+                   "no helmet": "no_helmet", "fall": "fall", "fell": "fall", "bag": "unattended",
                    "restricted": "access", "intruder": "access", "entry": "access", "crowd": "crowding",
                    "helmet": "ppe", "vest": "ppe", "ppe": "ppe", "loiter": "loitering"}
 

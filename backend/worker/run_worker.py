@@ -90,8 +90,12 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     bag_detector.warm_up()
     # PPE and fire/smoke need custom models; each rule stays off until its model path is set in .env
     ppe_detector = optional_detector(settings.ppe_model_path, settings.detect_imgsz, settings.detect_conf, "PPE")
-    fire_detector = optional_detector(settings.fire_model_path, settings.detect_imgsz, settings.detect_conf, "fire")
-    for extra in (ppe_detector, fire_detector):
+    # flames are kept from FIRE_CONF up (a lighter's flame scores lower); the rule still needs FIRE_FRAMES in a row
+    fire_detector = optional_detector(settings.fire_model_path, settings.detect_imgsz,
+                                      min(settings.detect_conf, settings.fire_conf), "fire")
+    helmet_detector = optional_detector(settings.helmet_model_path, settings.detect_imgsz, settings.detect_conf,
+                                        "rider helmet")
+    for extra in (ppe_detector, fire_detector, helmet_detector):
         if extra is not None:
             extra.warm_up()
 
@@ -152,8 +156,11 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
                 ppe = [DetectionObs(d.xyxy, d.label, d.confidence) for d in ppe_detector.detect(keyframe.image)]
             if fire_detector is not None:
                 fire = [DetectionObs(d.xyxy, d.label, d.confidence) for d in fire_detector.detect(keyframe.image)]
+            riders = None
+            if helmet_detector is not None:
+                riders = [DetectionObs(d.xyxy, d.label, d.confidence) for d in helmet_detector.detect(keyframe.image)]
             candidates = engine.update(now, datetime.now(timezone.utc), w, h, [to_obs(p) for p in people], bags,
-                                       ppe=ppe, fire=fire)
+                                       ppe=ppe, fire=fire, riders=riders)
 
             analysed_in_window += 1
             if now - window_start >= REPORT_EVERY_S:

@@ -80,13 +80,13 @@ export function AssistantPage() {
       <div
         aria-hidden="true"
         className="pointer-events-none absolute left-1/2 top-[18%] h-[60vh] w-[60vh] -translate-x-1/2 rounded-full blur-3xl transition-colors duration-700"
-        style={{ background: alarm ? 'rgba(239,68,68,0.16)' : 'rgba(37,99,235,0.18)' }}
+        style={{ background: alarm ? `rgba(${friday.alarmRgb},0.18)` : 'rgba(37,99,235,0.18)' }}
       />
 
-      <FridayBlob state={friday.state} getLevel={getLevel} className="relative z-0 mt-2 h-[46vh] min-h-[260px] w-full max-w-[640px]" />
+      <FridayBlob state={friday.state} alarmRgb={friday.alarmRgb} getLevel={getLevel} className="relative z-0 mt-2 h-[46vh] min-h-[260px] w-full max-w-[640px]" />
 
       <section className="relative z-10 -mt-2 flex w-full max-w-2xl flex-col items-center text-center" aria-live="polite">
-        <h1 className="font-mono text-[11px] uppercase tracking-[0.35em]" style={{ color: alarm ? '#f87171' : '#7dd3fc' }}>
+        <h1 className="font-mono text-[11px] uppercase tracking-[0.35em]" style={{ color: alarm ? `rgb(${friday.alarmRgb})` : '#7dd3fc' }}>
           Friday
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">{STATE_TEXT[friday.state]}</p>

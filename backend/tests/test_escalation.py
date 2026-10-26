@@ -181,3 +181,13 @@ def test_silent_camera_messages_the_admin_once(ladder, roster, monkeypatch):
     ladder.check_heartbeats()
     ladder.check_heartbeats()
     assert len(ladder.whatsapp.sent) == 1 and "silent" in ladder.whatsapp.sent[0][1]
+
+
+def test_rider_without_a_helmet_calls_only_the_gate_guard_of_that_camera(ladder, roster):
+    check_in(roster, "Suresh Babu")  # the Guard who has cam-webcam
+    incident_id = make_incident(roster, type_="no_helmet", severity="low")
+    ladder.start(incident_id)
+    assert sorted(ladder.scheduler.jobs) == [f"ladder:{incident_id}:0"]  # no hierarchy, no repeat check
+    ladder.scheduler.run(f"ladder:{incident_id}:0")
+    called = [c.to_name for c in roster.query(Call).filter_by(incident_id=incident_id)]
+    assert called == ["Suresh Babu"]

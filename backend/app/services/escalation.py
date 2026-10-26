@@ -48,7 +48,8 @@ log = logging.getLogger("safetyai.escalation")
 
 TYPE_LABELS = {
     "access": "Restricted area entry", "ppe": "Missing helmet or vest", "fall": "Person down, possible fall",
-    "fire": "Fire or smoke", "unattended": "Unattended bag", "loitering": "Loitering", "crowding": "Crowding",
+    "fire": "Fire", "smoke": "Smoke", "no_helmet": "Rider without a helmet", "unattended": "Unattended bag",
+    "loitering": "Loitering", "crowding": "Crowding",
 }
 
 
@@ -60,7 +61,9 @@ class Step:
     defer_on_screen: bool = False  # the target has a dashboard open: wait ONSCREEN_GRACE_S before calling
 
 
-def ladder_for(severity: str, s: Settings) -> list[Step]:
+def ladder_for(severity: str, s: Settings, kind: str | None = None) -> list[Step]:
+    if kind == "no_helmet":  # a rider without a helmet at a gate: just the guard of that gate's camera, at once
+        return [Step(0, "call", "gate_guard")]
     # Critical and high call the whole hierarchy; if nobody has acknowledged after NO_ANSWER_ALERT_ALL_S,
     # every guard on shift gets a WhatsApp and a call that tells them the problem (roll call).
     nobody = Step(s.no_answer_alert_all_s, "alert_all", "guards")
@@ -120,13 +123,13 @@ class Escalation:
             incident = incident_ops.load(db, incident_id)
             if incident is None:
                 return
-            severity = incident.severity
+            severity, kind = incident.severity, incident.type
         now = datetime.now(timezone.utc)
-        for index, step in enumerate(ladder_for(severity, self.settings)):
+        for index, step in enumerate(ladder_for(severity, self.settings, kind)):
             self.scheduler.add_job(self.run_step, "date", run_date=now + timedelta(seconds=step.delay_s),
                                    args=[incident_id, index], id=f"ladder:{incident_id}:{index}",
                                    replace_existing=True, misfire_grace_time=60)
-        if severity == "low":
+        if severity == "low" and kind != "no_helmet":
             self.scheduler.add_job(self.check_low_repeat, "date", run_date=now, args=[incident_id],
                                    id=f"repeat:{incident_id}", replace_existing=True, misfire_grace_time=60)
         log.info("incident=%d step=ladder_scheduled severity=%s", incident_id, severity)
@@ -161,6 +164,14 @@ class Escalation:
             managers = contacts_for_role(db, s.role_manager, incident.camera_id, incident.zone)
             in_zone = [c for c in managers if c.zone == incident.zone]
             return (in_zone or managers)[:1], False
+        if who == "gate_guard":
+            # the guard of the gate this camera watches: a Guard who has this camera, the one in this zone first;
+            # nobody (on duty) with this camera -> that camera's Head Guard
+            guards, fallback = contacts_on_duty(db, s.role_guard, incident.camera_id, incident.zone)
+            if guards:
+                in_zone = [c for c in guards if incident.zone and c.zone == incident.zone]
+                return (in_zone or guards)[:1], fallback
+            return contacts_on_duty(db, s.role_head_guard, incident.camera_id, incident.zone)
         role = {"head_guard": s.role_head_guard, "admin": s.role_admin, "manager": s.role_manager}[who]
         return contacts_on_duty(db, role, incident.camera_id, incident.zone)
 
@@ -191,7 +202,7 @@ class Escalation:
             incident = incident_ops.load(db, incident_id)
             if incident is None:
                 return
-            step = ladder_for(incident.severity, self.settings)[index]
+            step = ladder_for(incident.severity, self.settings, incident.type)[index]
             if incident.status != "open":
                 log.info("incident=%d step=%d skipped: already %s", incident_id, index, incident.status)
                 if deferred:

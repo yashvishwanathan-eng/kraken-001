@@ -19,6 +19,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Search, X, RotateCcw } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { SeverityBadge } from '@/components/SeverityBadge'
+import { incidentColor, typeLabel } from '@/lib/incidentLook'
 import { StatusChip } from '@/components/StatusChip'
 import { SkeletonTable } from '@/components/Skeletons'
 import { EmptyState } from '@/components/EmptyState'
@@ -32,7 +33,9 @@ const INCIDENT_TYPES: { value: IncidentType; label: string }[] = [
   { value: 'access', label: 'Access Violation' },
   { value: 'ppe', label: 'PPE Violation' },
   { value: 'fall', label: 'Person Fall' },
-  { value: 'fire', label: 'Fire / Smoke' },
+  { value: 'fire', label: 'Fire' },
+  { value: 'smoke', label: 'Smoke' },
+  { value: 'no_helmet', label: 'Rider without helmet' },
   { value: 'unattended', label: 'Unattended Object' },
   { value: 'loitering', label: 'Loitering' },
   { value: 'crowding', label: 'Crowding' },
@@ -461,13 +464,13 @@ export function IncidentsPage() {
                   >
                     {/* Severity */}
                     <td className="px-4 py-3.5">
-                      <SeverityBadge severity={incident.severity} size="sm" />
+                      <SeverityBadge severity={incident.severity} type={incident.type} size="sm" />
                     </td>
 
                     {/* Type */}
                     <td className="px-4 py-3.5">
-                      <span className="font-mono text-[11px] uppercase tracking-wider text-white/90">
-                        {incident.type}
+                      <span className="font-mono text-[11px] uppercase tracking-wider" style={{ color: incidentColor(incident.type, incident.severity) }}>
+                        {typeLabel(incident.type)}
                       </span>
                     </td>
 

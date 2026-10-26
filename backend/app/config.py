@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     site_address: str = ""  # read to the fire station on that call, e.g. "Plot 12, Hosur Road, Bengaluru"
     ppe_model_path: str = ""  # helmet/vest model (.pt); empty = PPE rule off until a model is chosen
     fire_model_path: str = ""  # fire/smoke model (.pt); empty = fire rule off until a model is chosen
+    helmet_model_path: str = ""  # two-wheeler riders with/without helmet (.pt); empty = rule off (gate cameras)
     rumik_api_key: str = ""  # secret: Rumik Silk text to speech (the assistant's spoken replies)
     rumik_gateway_url: str = ""  # the gateway address shown in the Rumik dashboard (playground.rumik.ai)
     rumik_model: str = "mulberry"  # mulberry (takes a voice description) or muga
@@ -148,7 +149,12 @@ class Settings(BaseSettings):
     # PPE and fire models (labels differ between models, so they are configurable)
     ppe_helmet_labels: str = "helmet,hardhat,hard-hat"
     ppe_vest_labels: str = "vest,safety-vest,safety vest"
-    fire_labels: str = "fire,smoke"
+    fire_labels: str = "fire,flame"
+    smoke_labels: str = "smoke"
+    no_helmet_labels: str = "without helmet,without_helmet,no helmet,no-helmet,no_helmet,nohelmet,without-helmet"
+    fire_conf: float = 0.35  # flames: lower than DETECT_CONF so a lighter's small flame still counts
+    smoke_frames: int = 5
+    no_helmet_frames: int = 4
     ppe_missing_frames: int = 10
     fire_frames: int = 5
 

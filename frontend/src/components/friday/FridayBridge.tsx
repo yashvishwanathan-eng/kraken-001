@@ -13,11 +13,12 @@ import { Siren } from 'lucide-react'
 import { acknowledgeEvent } from '@/lib/api'
 import { useAuth } from '@/lib/auth'
 import { isSpeaker, setSpeaker, showState, speak } from '@/lib/friday'
+import { incidentRgb } from '@/lib/incidentLook'
 import { wsClient } from '@/lib/ws'
 import type { Incident } from '@/lib/types'
 
 const LABEL: Record<string, string> = {
-  fire: 'Fire detected', fall: 'Person down', access: 'Restricted area entry', unattended: 'Unattended bag',
+  fire: 'Fire detected', smoke: 'Smoke detected', no_helmet: 'Rider without a helmet', fall: 'Person down', access: 'Restricted area entry', unattended: 'Unattended bag',
   crowding: 'Crowding', ppe: 'Missing helmet or vest', loitering: 'Loitering',
 }
 
@@ -78,7 +79,7 @@ export function FridayBridge() {
     if (inc.status !== 'open' || (inc.severity !== 'critical' && inc.severity !== 'high') || announced.current.has(inc.id)) return
     announced.current.add(inc.id)
     setAlarm(inc)
-    showState('alarm')
+    showState('alarm', { alarmRgb: incidentRgb(inc.type, inc.severity) })
     if (isSpeaker()) void speak(alarmSentence(inc), 'urgent') // an emergency: her urgent voice
   }), [navigate, user?.id])
 
@@ -92,18 +93,21 @@ export function FridayBridge() {
     }
   }
 
+  // fire: orange glow, smoke: grey, every other emergency: red (its severity colour)
+  const tone = alarm ? incidentRgb(alarm.type, alarm.severity) : '239,68,68'
+
   return (
     <AnimatePresence>
       {alarm && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none fixed inset-0 z-[55]">
           <motion.div
             className="absolute inset-0"
-            animate={{ boxShadow: ['inset 0 0 60px 6px rgba(239,68,68,0.55)', 'inset 0 0 120px 18px rgba(239,68,68,0.85)', 'inset 0 0 60px 6px rgba(239,68,68,0.55)'] }}
+            animate={{ boxShadow: [`inset 0 0 60px 6px rgba(${tone},0.55)`, `inset 0 0 120px 18px rgba(${tone},0.85)`, `inset 0 0 60px 6px rgba(${tone},0.55)`] }}
             transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
           />
           <div className="pointer-events-auto absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-3 rounded-full border px-4 py-2 shadow-2xl"
-               style={{ background: 'rgba(24,8,10,0.92)', borderColor: 'rgba(239,68,68,0.6)' }} role="alert">
-            <Siren className="h-4 w-4 animate-pulse text-red-400" aria-hidden="true" />
+               style={{ background: 'rgba(14,10,8,0.94)', borderColor: `rgba(${tone},0.7)` }} role="alert">
+            <Siren className="h-4 w-4 animate-pulse" style={{ color: `rgb(${tone})` }} aria-hidden="true" />
             <span className="text-sm font-medium text-white">{LABEL[alarm.type] ?? alarm.type} · {alarm.camera_name}</span>
             <button type="button" onClick={() => navigate(`/incidents/${alarm.id}`)} className="rounded-full border border-white/20 px-3 py-1 text-xs text-white hover:bg-white/10 cursor-pointer">Open</button>
             <button type="button" onClick={acknowledge} className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-black hover:bg-white/90 cursor-pointer">Acknowledge</button>

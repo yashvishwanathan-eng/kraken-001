@@ -47,7 +47,7 @@ def test_alert_call_reads_the_alert_and_options(roster, twilio_on):
     high = alert_call(roster, make_incident(roster, type_="unattended", severity="high"))
     critical_xml = twilio_post(client, f"/twilio/voice?call_id={critical}", {}).text
     high_xml = twilio_post(client, f"/twilio/voice?call_id={high}", {}).text
-    assert "<Gather" in critical_xml and "Fire or smoke" in critical_xml and "Press 1" in critical_xml
+    assert "<Gather" in critical_xml and "Fire" in critical_xml and "Press 1" in critical_xml
     assert "Press 2" not in critical_xml  # critical: phone can only acknowledge
     assert "Press 2 if it is a false alarm" in high_xml
     assert "say alert everybody" in critical_xml  # Ravi (Head Guard) has the alert_all action

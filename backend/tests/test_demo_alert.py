@@ -37,7 +37,7 @@ def test_demo_severity_and_camera_choice(roster, monkeypatch):
     access = client.post("/demo/incident", json={"type": "access", "camera_id": "cam-webcam"}, headers=headers).json()
     assert access["severity"] in ("high", "critical") and access["camera_id"] == "cam-webcam"
     assert client.post("/demo/incident", json={"type": "ppe"}, headers=headers).json()["severity"] == "low"
-    assert client.post("/demo/incident", json={"type": "smoke"}, headers=headers).status_code == 422
+    assert client.post("/demo/incident", json={"type": "flood"}, headers=headers).status_code == 422
     assert client.post("/demo/incident", json={"type": "fire", "camera_id": "nope"}, headers=headers).status_code == 404
 
 

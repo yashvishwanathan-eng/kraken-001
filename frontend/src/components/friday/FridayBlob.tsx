@@ -104,16 +104,24 @@ void main() {
 }
 `
 
-export function FridayBlob({ state, getLevel, className }: { state: FridayState; getLevel: () => number; className?: string }) {
+function alarmColors(rgb: string): [string, string] {
+  const [r, g, b] = rgb.split(',').map(Number)
+  const deep = `rgb(${Math.round(r * 0.6)},${Math.round(g * 0.6)},${Math.round(b * 0.6)})`
+  return [deep, `rgb(${r},${g},${b})`]
+}
+
+export function FridayBlob({ state, getLevel, className, alarmRgb }: { state: FridayState; getLevel: () => number; className?: string; alarmRgb?: string }) {
   const mountRef = useRef<HTMLDivElement>(null)
   const stateRef = useRef(state)
   const getLevelRef = useRef(getLevel)
+  const alarmRef = useRef(alarmRgb)
   const [noWebgl, setNoWebgl] = useState(false)
 
   useEffect(() => {
     stateRef.current = state
     getLevelRef.current = getLevel
-  }, [state, getLevel])
+    alarmRef.current = alarmRgb
+  }, [state, getLevel, alarmRgb])
 
   useEffect(() => {
     const mount = mountRef.current
@@ -185,7 +193,8 @@ export function FridayBlob({ state, getLevel, className }: { state: FridayState;
       const spin = s === 'thinking' ? 0.9 : 0.12 + smooth * 0.4
       mesh.rotation.y += dt * spin
       mesh.rotation.x += dt * spin * 0.35
-      const [d, b] = COLORS[s]
+      // an alarm takes its incident's colour: orange for fire, grey for smoke, red otherwise
+      const [d, b] = s === 'alarm' && alarmRef.current ? alarmColors(alarmRef.current) : COLORS[s]
       uniforms.colorDeep.value.lerp(targetDeep.set(d), 0.08)
       uniforms.colorBright.value.lerp(targetBright.set(b), 0.08)
       renderer.render(scene, camera)

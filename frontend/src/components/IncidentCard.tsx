@@ -8,6 +8,7 @@
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { SeverityBadge } from '@/components/SeverityBadge'
+import { incidentColor, typeLabel } from '@/lib/incidentLook'
 import { formatIncidentTime } from '@/lib/time'
 import type { Incident } from '@/lib/types'
 
@@ -44,9 +45,10 @@ export function IncidentCard({ incident }: IncidentCardProps) {
     >
       {/* Top row: Severity badge & Incident Type */}
       <div className="flex items-center justify-between gap-2 mb-2.5">
-        <SeverityBadge severity={incident.severity} size="sm" />
-        <span className="text-[11px] font-mono font-medium uppercase tracking-wider px-2 py-0.5 rounded-[6px] bg-white/5 text-[var(--text-secondary)] border border-white/10">
-          {incident.type}
+        <SeverityBadge severity={incident.severity} type={incident.type} size="sm" />
+        <span className="text-[11px] font-mono font-medium uppercase tracking-wider px-2 py-0.5 rounded-[6px] bg-white/5 border border-white/10"
+              style={{ color: incidentColor(incident.type, incident.severity) }}>
+          {typeLabel(incident.type)}
         </span>
       </div>
 

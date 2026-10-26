@@ -237,7 +237,7 @@ class CallService:
         with SessionLocal() as db:
             call = db.get(Call, call_id)
             incident = incident_ops.load(db, call.incident_id) if call.incident_id else None
-            style = call_agent.style_for(call.kind)
+            style = call_agent.style_for(call.kind, incident.severity if incident else "")
             if self.settings.call_style == "conversation" and call.kind in ("alert", "roll_call", "direct"):
                 # the opening, the "one second" fillers and "Go, Ravi! ..." (so "I'm going" is answered at once)
                 texts = [call_agent.opening(call, incident), *call_agent.FILLERS,

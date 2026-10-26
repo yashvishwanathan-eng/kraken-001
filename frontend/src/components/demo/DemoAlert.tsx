@@ -6,14 +6,17 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Siren, X, Flame, PersonStanding, DoorOpen } from 'lucide-react'
+import { Bike, CloudFog, DoorOpen, Flame, PersonStanding, Siren, X } from 'lucide-react'
 import { describe } from '@/lib/timeline'
+import { incidentColor } from '@/lib/incidentLook'
 import { acknowledgeEvent, fetchCameras, fetchHealth, fetchMe, raiseDemoIncident, type DemoIncidentType } from '@/lib/api'
 import { wsClient } from '@/lib/ws'
 import type { Incident, WsEvent } from '@/lib/types'
 
 const TYPES: { type: DemoIncidentType; label: string; icon: typeof Flame }[] = [
   { type: 'fire', label: 'Fire', icon: Flame },
+  { type: 'smoke', label: 'Smoke', icon: CloudFog },
+  { type: 'no_helmet', label: 'No helmet', icon: Bike },
   { type: 'fall', label: 'Person down', icon: PersonStanding },
   { type: 'access', label: 'Restricted entry', icon: DoorOpen },
 ]
@@ -127,7 +130,7 @@ export function DemoAlert() {
                   className="flex items-center gap-2 rounded-[10px] border px-3 py-2 text-left text-xs text-white hover:bg-white/5 cursor-pointer disabled:opacity-50"
                   style={{ borderColor: 'var(--border)' }}
                 >
-                  <Icon className="w-3.5 h-3.5" aria-hidden="true" style={{ color: 'var(--critical)' }} />
+                  <Icon className="w-3.5 h-3.5" aria-hidden="true" style={{ color: incidentColor(type, type === 'no_helmet' ? 'low' : 'critical') }} />
                   {label}
                 </button>
               ))}

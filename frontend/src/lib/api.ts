@@ -600,7 +600,7 @@ export async function fetchSummary(from?: string, to?: string): Promise<SectorSu
 
 /* ── Demo alarm ─────────────────────────────────────────── */
 
-export type DemoIncidentType = 'fire' | 'fall' | 'access'
+export type DemoIncidentType = 'fire' | 'smoke' | 'no_helmet' | 'fall' | 'access'
 
 /**
  * Raises a demo alarm (needs the run_demo action). It is a real incident: every dashboard gets it and the

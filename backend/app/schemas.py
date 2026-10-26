@@ -18,7 +18,7 @@ def iso_utc(dt: datetime) -> str:
 
 UtcDatetime = Annotated[datetime, PlainSerializer(iso_utc, return_type=str)]
 
-IncidentType = Literal["access", "ppe", "fall", "fire", "unattended", "loitering", "crowding"]
+IncidentType = Literal["access", "ppe", "fall", "fire", "smoke", "no_helmet", "unattended", "loitering", "crowding"]
 Severity = Literal["critical", "high", "low"]
 Status = Literal["open", "acknowledged", "resolved", "false_alarm"]
 TimelineAction = Literal[
