@@ -9,6 +9,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Phone, Plus, Shield, UserPlus } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Button, Checks, Dot, ErrorLine, Field, Modal, Select, Tabs, Tile, useMe } from '@/components/admin/kit'
+import { FaceAccessModal } from '@/components/admin/FaceAccessModal'
 import {
   createRole, fetchPeople, fetchRoles, invitePerson, updatePerson, updateRole,
   type InviteCreated, type Person, type Role,
@@ -140,6 +141,7 @@ function PeopleTab({ roles }: { roles: Role[] }) {
   const { data, error } = useQuery({ queryKey: ['people'], queryFn: fetchPeople })
   const [adding, setAdding] = useState(false)
   const [editing, setEditing] = useState<Person | null>(null)
+  const [faceFor, setFaceFor] = useState<Person | null>(null)
   const [query, setQuery] = useState('')
   const list = useMemo(
     () => (data ?? []).filter(p => `${p.name} ${p.role} ${p.staff_id} ${p.phone ?? ''}`.toLowerCase().includes(query.toLowerCase())),
@@ -183,7 +185,7 @@ function PeopleTab({ roles }: { roles: Role[] }) {
                   </td>
                   <td className="px-4 py-2.5 text-muted-foreground">{p.zone ?? '—'} · {p.shift_start === p.shift_end ? 'all day' : `${p.shift_start}–${p.shift_end}`}</td>
                   <td className="px-4 py-2.5 text-muted-foreground">{p.actions.includes('all_cameras') ? 'all' : p.camera_ids.length}</td>
-                  <td className="px-4 py-2.5 text-right"><Button onClick={() => setEditing(p)}>Edit</Button></td>
+                  <td className="px-4 py-2.5 text-right"><span className="inline-flex gap-1.5"><Button onClick={() => setFaceFor(p)}>Face &amp; access</Button><Button onClick={() => setEditing(p)}>Edit</Button></span></td>
                 </tr>
               ))}
             </tbody>
@@ -192,6 +194,7 @@ function PeopleTab({ roles }: { roles: Role[] }) {
       </Tile>
       {adding && <AddPersonModal roles={roles} onClose={() => setAdding(false)} />}
       {editing && <EditPersonModal person={editing} roles={roles} onClose={() => setEditing(null)} />}
+      {faceFor && <FaceAccessModal person={faceFor} onClose={() => setFaceFor(null)} />}
     </>
   )
 }

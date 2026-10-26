@@ -634,4 +634,4 @@ export async function raiseDemoIncident(type: DemoIncidentType, camera_id?: stri
 
 /* ── Raw helpers for the admin screens (lib/admin.ts) ───── */
 
-export const http = { get, post, put, del }
+export const http = { get, post, put, del, form: postForm }

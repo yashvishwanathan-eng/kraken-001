@@ -28,6 +28,7 @@ class ZoneDef:
     kind: str  # restricted, ppe, work
     polygon: list[Point]
     max_people: int | None = None
+    allowed: frozenset[str] = frozenset()  # restricted zones: names whose recognised face may enter (P34)
 
 
 @dataclass(frozen=True)
@@ -230,9 +231,12 @@ class RulesEngine:
         ppe: list[DetectionObs] | None = None,
         fire: list[DetectionObs] | None = None,
         riders: list[DetectionObs] | None = None,
+        identities: dict[int, str] | None = None,
     ) -> list[Candidate]:
         """Feed one analysed frame. `t` is a monotonic clock in seconds.
 
+        `identities` (face recognition): track id -> the recognised person's name, or "" when a face was seen
+        but matched nobody; a track missing from it has shown no usable face yet.
         `bags`, `ppe`, `fire` and `riders` (helmet model) are None when that model did not run on this frame (or is not installed),
         which leaves its counters untouched.
         """
@@ -247,10 +251,15 @@ class RulesEngine:
         for p in people:
             for zone in zones_of[p.track_id]:
                 if zone.kind == "restricted":
+                    who = (identities or {}).get(p.track_id)
+                    if who and who in zone.allowed:
+                        continue  # a recognised person who may be here: no alert
                     dwell = self._access.tick((p.track_id, zone.name), t)
                     if dwell >= cfg.access_dwell_s:
+                        whom = ("unknown face" if who == "" else "face not visible" if who is None
+                                else f"{who}, not allowed here")
                         found.append(Candidate("access", "critical" if night else "high", zone.name, p.confidence,
-                                               (p.track_id,), f"inside {zone.name} for {dwell:.1f}s"))
+                                               (p.track_id,), f"inside {zone.name} for {dwell:.1f}s ({whom})"))
                 dwell = self._loiter.tick((p.track_id, zone.name), t)
                 if dwell >= cfg.loiter_s:
                     found.append(Candidate("loitering", "low", zone.name, p.confidence, (p.track_id,),

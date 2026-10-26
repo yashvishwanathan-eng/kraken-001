@@ -886,3 +886,20 @@ class PersonCalls(BaseModel):
 
 class ConversationOut(ConversationSummary):
     lines: list[ConversationTurnOut]
+
+
+# ---------- faces and restricted access (P34) ----------
+
+class FaceStatusOut(BaseModel):
+    user_id: int
+    samples: int  # face fingerprints enrolled (0 = not enrolled)
+    zone_ids: list[int]  # restricted zones this person may enter
+
+
+class FaceEnrollOut(FaceStatusOut):
+    added: int
+    rejected: list[str]  # why a photo could not be used, one line per photo
+
+
+class AccessIn(BaseModel):
+    zone_ids: list[int] = Field(default_factory=list, max_length=200)

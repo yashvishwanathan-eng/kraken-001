@@ -314,3 +314,30 @@ export const getConversations = (channel?: 'phone' | 'laptop', person?: string) 
 
 export const getConversation = (id: number) =>
   http.get<ConversationSummary & { lines: ConversationLine[] }>(`/conversations/${id}`)
+
+/* ── Faces and restricted access (P34) ─────────────────── */
+
+export interface FaceStatus {
+  user_id: number
+  samples: number
+  zone_ids: number[]
+}
+
+export interface RestrictedZone {
+  id: number
+  camera_id: string
+  name: string
+  kind: string
+}
+
+export const getFace = (userId: number) => http.get<FaceStatus>(`/users/${userId}/face`)
+export const deleteFace = (userId: number) => http.del<FaceStatus>(`/users/${userId}/face`)
+export const setAccess = (userId: number, zoneIds: number[]) => http.put<FaceStatus>(`/users/${userId}/access`, { zone_ids: zoneIds })
+export const getRestrictedZones = async () => (await http.get<RestrictedZone[]>('/zones')).filter(z => z.kind === 'restricted')
+
+export function enrollFace(userId: number, photos: Blob[]) {
+  const form = new FormData()
+  photos.forEach((p, i) => form.append('photos', p, `face-${i + 1}.jpg`))
+  form.append('consent', 'true')
+  return http.form<FaceStatus & { added: number; rejected: string[] }>(`/users/${userId}/face`, form)
+}

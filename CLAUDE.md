@@ -56,6 +56,7 @@ backend/
     heartbeat.py       posts online + analysed FPS to /internal/heartbeat every 5 s
     mjpeg.py           annotated MJPEG server on 127.0.0.1:81xx
     (app) services/conversations.py + routers/conversations.py: history of every talk with Friday, calls with audio (P31)
+    (app) services/faces.py + routers/faces.py: face enrollment (consent, fingerprints only) and allowed people per restricted zone; workers recognise faces in restricted zones (P34)
     recorder.py        all-day recording: 5-minute MP4 files per camera in media/recordings/, steady fps from the newest frame, 7 days kept (P30)
   config/cameras.yaml  cameras: id, name, source (0, http://PHONE-IP:8080/video, file path, rtsp://), port. Demo: cam-door (phone 1), cam-floor (phone 2), cam-entrance (laptop 2), cam-webcam (home testing)
   config/zones.yaml    demo zones per camera; polygon points are fractions of the frame (0..1); max_people for crowding

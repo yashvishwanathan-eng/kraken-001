@@ -34,6 +34,8 @@ class Zone(Base):
     kind: Mapped[str] = mapped_column(String(16))  # restricted, ppe, work
     polygon: Mapped[list[Any]] = mapped_column(JSON)  # [[x, y], ...] as fractions of frame width/height (0..1)
     max_people: Mapped[int | None] = mapped_column(Integer, nullable=True)  # crowding threshold N; None = no check
+    # restricted zones only (P34): people whose face lets them in without an alert
+    allowed_user_ids: Mapped[list[int]] = mapped_column(JSON, default=list, server_default="[]")
 
     camera: Mapped[Camera] = relationship(back_populates="zones")
 
@@ -334,3 +336,18 @@ class ConversationTurn(Base):
     action: Mapped[str | None] = mapped_column(String(32), nullable=True)  # what Friday did after it, if anything
     audio_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     conversation: Mapped[Conversation] = relationship(back_populates="turns")
+
+
+class FaceSample(Base):
+    """One face fingerprint of a person (P34): 128 numbers from the SFace model, made from one enrollment photo.
+
+    Only these numbers are kept, never the photo. They are compared with faces seen in restricted zones.
+    Deleting a person's face data deletes these rows; deleting the person deletes them too.
+    """
+
+    __tablename__ = "face_samples"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    embedding: Mapped[bytes] = mapped_column(LargeBinary)  # 128 float32
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
