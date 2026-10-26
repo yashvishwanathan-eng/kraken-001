@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     site_address: str = ""  # read to the fire station on that call, e.g. "Plot 12, Hosur Road, Bengaluru"
     ppe_model_path: str = ""  # helmet/vest model (.pt); empty = PPE rule off until a model is chosen
     fire_model_path: str = ""  # fire/smoke model (.pt); empty = fire rule off until a model is chosen
+    rumik_api_key: str = ""  # secret: Rumik Silk text to speech (the assistant's spoken replies)
+    rumik_gateway_url: str = ""  # the gateway address shown in the Rumik dashboard (playground.rumik.ai)
+    rumik_model: str = "muga"  # muga or mulberry
+    rumik_speaker: str = ""  # a preset voice (mulberry); empty = Rumik's default
+    rumik_timeout_s: float = 8.0
 
     # config values (not secrets; defaults match CLAUDE.md)
     cors_origins: list[str] = ["http://localhost:5173"]
@@ -76,6 +81,19 @@ class Settings(BaseSettings):
     login_max_failures: int = 5  # wrong PINs allowed per client per window before 429
     login_window_s: float = 60.0
     worker_heartbeat_s: float = 5.0  # how often a worker reports online/fps to the API
+
+    # cameras added from the dashboard (P22)
+    workers_autostart: bool = False  # true: the API starts a worker for every enabled camera and restarts crashed ones
+    worker_restart_s: float = 30.0  # wait this long before restarting a crashed worker
+    worker_log_dir: str = "logs"  # one log file per camera worker, relative to backend/
+    first_worker_port: int = 8101  # new cameras get the next free MJPEG port from here
+    camera_probe_timeout_s: float = 8.0  # "test camera" gives up after this long
+    staff_id_prefix: str = "RG"  # staff IDs look like RG-0007 (sent in the invitation email)
+
+    # duty check-in (P23): only these roles check in; off duty = not called (shift roster is the fallback)
+    duty_roles: str = "Head Guard,Guard"
+    duty_max_h: float = 16.0  # a check-in older than this no longer counts (someone forgot to check out)
+    camera_view_dedupe_s: float = 300.0  # one "camera viewed" log row per user and camera in this window
 
     # calls and messages: "auto" = live when the keys are set, otherwise off; "simulate" = log only, for demos
     calls_mode: str = "auto"  # auto, live, simulate, off
@@ -135,6 +153,7 @@ class CameraConfig(BaseModel):
     name: str
     source: str
     port: int
+    number: int | None = None  # "camera 6" by voice; seed numbers the rest in order
 
 
 @lru_cache

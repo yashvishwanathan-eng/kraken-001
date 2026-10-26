@@ -34,5 +34,6 @@ def audit_log(
         query = query.where(AuditLog.at <= to)
     query = query.order_by(AuditLog.at.desc(), AuditLog.id.desc()).limit(limit)
     with SessionLocal() as db:
-        return [AuditRow(at=row.at, user=row.user_name, action=row.action, target=row.target, channel=row.channel)
+        return [AuditRow(at=row.at, user=row.user_name, action=row.action, target=row.target, channel=row.channel,
+                         detail=row.detail)
                 for row in db.scalars(query)]

@@ -27,7 +27,8 @@ from app.models import Invitation, User
 from app.schemas import InviteAccept, InviteCreate, InviteCreated, InviteOut, InvitePreview, LoginResponse, UserBrief
 from app.services.audit import record
 from app.services.email_sender import emailer
-from app.services.permissions import create_session, find_user_by_pin, hash_pin
+from app.services import roles
+from app.services.permissions import create_session, find_user_by_pin, hash_pin, staff_id
 from app.routers.users import _validate
 
 router = APIRouter(prefix="/invites", tags=["invites"])
@@ -58,7 +59,8 @@ def _qr_png(text: str) -> str:
 
 
 def _invite_out(inv: Invitation, user: User, creator: str) -> InviteOut:
-    return InviteOut(invite_id=inv.id, user_id=user.id, name=user.name, email=inv.email, role=user.role,
+    return InviteOut(invite_id=inv.id, user_id=user.id, staff_id=staff_id(user.id), name=user.name, email=inv.email,
+                     role=user.role,
                      status=_status(inv, datetime.now(timezone.utc)), expires_at=_as_utc(inv.expires_at),
                      created_by=creator)
 
@@ -75,13 +77,13 @@ def _find_valid(db: DbSession, token: str) -> tuple[Invitation, User]:
 def create_invite(body: InviteCreate, admin: User = Depends(require("manage_users"))) -> InviteCreated:
     settings = get_settings()
     with SessionLocal() as db:
-        _validate(db, body.camera_ids, body.actions, None, None)
+        camera_ids, actions = roles.defaults(db, body.role, body.camera_ids, body.actions)
+        _validate(db, camera_ids, actions, None, None)
         if db.scalar(select(Invitation).where(Invitation.email == body.email, Invitation.used_at.is_(None),
                                               Invitation.revoked.is_(False))):
             raise HTTPException(status_code=409, detail="a pending invitation already exists for this email")
         # inactive account: cannot log in until the invitation is accepted. The PIN hash is a random placeholder.
-        user = User(name=body.name, role=body.role, camera_ids=sorted(set(body.camera_ids)),
-                    actions=sorted(set(body.actions)), active=False,
+        user = User(name=body.name, role=body.role, camera_ids=camera_ids, actions=actions, active=False,
                     pin_hash=hash_pin(secrets.token_urlsafe(24)))
         db.add(user)
         db.flush()
@@ -95,6 +97,7 @@ def create_invite(body: InviteCreate, admin: User = Depends(require("manage_user
             body.email,
             "You are invited to RingGuard",
             f"Hello {body.name},\n\n{admin.name} invited you to RingGuard as {body.role}.\n"
+            f"Your staff ID is {staff_id(user.id)}. Keep it: it is on your duty pass and in every log.\n"
             f"Open this link on your laptop or phone to set your PIN (valid for {int(settings.invite_ttl_h)} hours):\n"
             f"{link}\n\nIf you did not expect this, you can ignore this email.",
         )

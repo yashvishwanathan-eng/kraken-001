@@ -17,17 +17,18 @@ import secrets
 import threading
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, select
 
 from app.config import PRODUCT_NAME, get_settings
 from app.db import SessionLocal
 from app.models import Camera, Incident, User
-from app.services import alerts, camera_status, incidents as incident_ops
+from app.services import alerts, camera_status, duty, incidents as incident_ops, summary as summaries
 from app.services.assistant import ask
 from app.services.audit import record
 from app.services.calls import calls
-from app.services.directory import contact_by_name, on_shift_contacts
+from app.services.directory import contact_by_name, on_shift_contacts, on_shift_contacts_with_fallback
 from app.services.escalation import escalation
 from app.services.knowledge import knowledge
 from app.services.llm import choose_tool
@@ -54,8 +55,10 @@ PATTERNS: list[tuple[str, re.Pattern]] = [(intent, re.compile(p)) for intent, p 
     ("alert_all", r"\b(call|alert) (everybody|everyone|all( the)? guards|all)\b"),
     ("stop_calls", r"\bstop (all )?(the )?calls?\b"),
     ("not_responded", r"\bwho (has ?n.?t|has not|did ?n.?t|didn't) (responded|answered|replied)\b"),
+    ("summary", r"\b(summary|summari[sz]e|recap)\b"),
+    ("on_duty", r"\b(on|off) duty\b"),
     ("status_report", r"\bstatus( report)?\b"),
-    ("show_camera", r"\bshow (me )?(the )?camera\s*(?P<camera>[\w-]+)"),
+    ("show_camera", r"\b(show|open|display) (me )?(the )?cam(era)?s?\s*(?P<camera>[\w-]+((\s*(,|and|&)\s*)+[\w-]+)*)"),
     ("ack", r"\b(ack|acknowledge)\b"),
     ("resolve", r"\b(resolve|close)\b"),
     ("call_zone", r"\bcall (the )?zone (?P<zone>[\w -]+)"),
@@ -76,7 +79,13 @@ TOOLS = [
         ("call_zone", "Call the on-shift guards of one zone.", {"zone": {"type": "string"}}),
         ("broadcast_message", "Send a text message to every on-shift guard.", {"text": {"type": "string"}}),
         ("status_report", "Summarise open incidents and camera status.", {}),
-        ("show_camera", "Show one camera on screen.", {"camera": {"type": "string"}}),
+        ("show_camera", "Show one or more cameras on screen.",
+         {"camera": {"type": "string", "description": "camera number(s) or name, e.g. '3, 4 and 12'"}}),
+        ("summary", "Summary of what happened for a time window, optionally for some cameras.",
+         {"hours": {"type": "number", "description": "the past N hours; omit for today"},
+          "period": {"type": "string", "enum": ["today", "yesterday"]},
+          "cameras": {"type": "array", "items": {"type": "integer"}, "description": "camera numbers"}}),
+        ("on_duty", "Say which guards are on duty and which are off duty.", {}),
         ("query", "Answer a question about past incidents.", {"question": {"type": "string"}}),
         ("ack", "Acknowledge an incident.", {"incident_id": {"type": "integer"}}),
         ("resolve", "Resolve an incident.", {"incident_id": {"type": "integer"}}),
@@ -210,14 +219,15 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
     if intent == "call_zone":
         zone = (args.get("zone") or "").strip().replace(" ", "-")
         with SessionLocal() as db:
-            contacts = on_shift_contacts(db, zone=zone)
+            contacts, fallback = on_shift_contacts_with_fallback(db, zone=zone)
         placed = [c.name for c in contacts if calls.place(
             kind="direct", to_name=c.name, to_phone=c.phone, responder_id=c.responder_id,
             message=f"{PRODUCT_NAME} control room. Everyone in {zone.replace('-', ' ')}, please respond.")]
         _audit(user, "call_zone", f"zone:{zone}")
         if not contacts:
             return CommandResult(intent, "refused", f"Nobody is on shift in {zone.replace('-', ' ')}.")
-        return CommandResult(intent, "done", f"Calling {len(placed)} people in {zone.replace('-', ' ')}.")
+        note = " Nobody there is checked in on duty, so I used the shift roster." if fallback else ""
+        return CommandResult(intent, "done", f"Calling {len(placed)} people in {zone.replace('-', ' ')}.{note}")
 
     if intent == "broadcast_message":
         message = args.get("text") or text
@@ -232,10 +242,25 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
         return CommandResult(intent, "done", _status_report(user))
 
     if intent == "show_camera":
-        camera = _find_camera(args.get("camera", ""), user)
-        if camera is None:
+        wanted = str(args.get("camera", ""))
+        parts = [w for w in re.split(r"\s*(?:,|\band\b|&)\s*", wanted) if w.strip()] or [wanted]
+        if any(w.isdigit() for w in parts):
+            parts = [w for w in parts if w.isdigit()]  # "cameras 3, 4 and 12 and show them": the numbers only
+        found = [c for c in (_find_camera(w, user) for w in parts) if c is not None]
+        found = list({c.id: c for c in found}.values())
+        if not found:
             return CommandResult(intent, "refused", "I couldn't find that camera.")
-        return CommandResult(intent, "done", f"Showing {camera.name}.", data={"camera_id": camera.id})
+        missing = len(parts) - len(found)
+        answer = f"Showing {', '.join(c.name for c in found)}." + (
+            f" {missing} of those I couldn't find." if missing > 0 else "")
+        return CommandResult(intent, "done", answer,
+                             data={"camera_id": found[0].id, "camera_ids": [c.id for c in found]})
+
+    if intent == "summary":
+        return _summary(args, user, text)
+
+    if intent == "on_duty":
+        return CommandResult(intent, "done", _duty_report(user))
 
     if intent == "query":
         with SessionLocal() as db:
@@ -319,12 +344,92 @@ def _status_report(user: User) -> str:
 
 def _find_camera(text: str, user: User) -> Camera | None:
     with SessionLocal() as db:
-        cameras = list(db.scalars(select(Camera).order_by(Camera.id)))
+        cameras = list(db.scalars(select(Camera).order_by(Camera.number.nulls_last(), Camera.id)))
     cameras = [c for c in cameras if can_see(user, c.id)]
     text = text.lower().strip()
-    if text.isdigit() and 1 <= int(text) <= len(cameras):
-        return cameras[int(text) - 1]  # "show camera 2" = the second camera in the list
+    if text.isdigit():
+        return next((c for c in cameras if c.number == int(text)), None)  # "show camera 6" = camera number 6
     return next((c for c in cameras if text and (text in c.id.lower() or text in c.name.lower())), None)
+
+
+WORD_NUMBERS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "eight": 8,
+                "twelve": 12}
+
+
+def summary_window(text: str, args: dict, now: datetime | None = None) -> tuple[datetime, datetime, str]:
+    """(start, end, label) from "today", "yesterday", "the past hour", "last 3 hours", "last 30 minutes"."""
+    now = now or datetime.now(timezone.utc)
+    lowered = text.lower()
+    hours = args.get("hours")
+    if hours is None:
+        if m := re.search(r"\b(?:past|last|previous)\s+(?:(\d+|an?|one|two|three|four|five|six|eight|twelve)\s+)?"
+                          r"(hours?|hrs?|minutes?|mins?)\b", lowered):
+            amount = m.group(1) or "1"
+            amount = int(amount) if amount.isdigit() else WORD_NUMBERS[amount]
+            hours = amount / 60 if m.group(2).startswith("min") else amount
+    if hours is not None:
+        hours = max(1 / 60, min(float(hours), 24 * 31))
+        if hours < 1:
+            label = f"the past {round(hours * 60)} minutes"
+        else:
+            label = "the past hour" if hours == 1 else f"the past {hours:g} hours"
+        return now - timedelta(hours=hours), now, label
+    today_start, _ = summaries.today_window(now)
+    if args.get("period") == "yesterday" or "yesterday" in lowered:
+        return today_start - timedelta(days=1), today_start, "yesterday"
+    return today_start, now, "today"
+
+
+def summary_cameras(text: str, args: dict) -> list[int]:
+    """Camera numbers: "cameras 6, 7 and 8", "camera 3", or the LLM's list."""
+    if args.get("cameras"):
+        return [int(n) for n in args["cameras"] if str(n).isdigit()]
+    m = re.search(r"\bcam(?:era)?s?\s+((?:number\s+)?\d+(?:(?:\s*(?:,|and|&)\s*)+\d+)*)", text.lower())
+    return [int(n) for n in re.findall(r"\d+", m.group(1))] if m else []
+
+
+def _summary(args: dict, user: User, text: str) -> CommandResult:
+    start, end, label = summary_window(text, args)
+    numbers = summary_cameras(text, args)
+    with SessionLocal() as db:
+        picked, missing = None, []
+        if numbers:
+            by_number = {c.number: c for c in db.scalars(select(Camera).where(Camera.number.in_(numbers)))
+                         if can_see(user, c.id)}
+            missing = [n for n in numbers if n not in by_number]
+            picked = [by_number[n].id for n in numbers if n in by_number]
+            if not picked:
+                return CommandResult("summary", "refused", f"I couldn't find camera{'s' if len(numbers) > 1 else ''} "
+                                                           f"{', '.join(map(str, numbers))} among your cameras.")
+        result = summaries.build(db, db.merge(user), start, end, picked)
+    cams = result["cameras"]
+    scope = summaries.camera_list_text(cams) if picked else (
+        "all cameras" if result["sector"]["all_cameras"] else f"{len(cams)} of your cameras")
+    tz = get_settings().timezone
+    answer = (f"Summary for {scope}, {label} ({summaries.clock(start, tz)} to {summaries.clock(end, tz)}). "
+              + result["text"].split(". ", 1)[-1])
+    if missing:
+        answer += f" Camera{'s' if len(missing) > 1 else ''} {', '.join(map(str, missing))} not found."
+    return CommandResult("summary", "done", answer, data={
+        "from": start.isoformat(), "to": end.isoformat(), "camera_ids": result["sector"]["camera_ids"],
+        "incident_ids": [i["incident_id"] for i in result["violations"]["items"]]})
+
+
+def _duty_report(user: User) -> str:
+    scope = allowed_cameras(user)
+    with SessionLocal() as db:
+        guards = [u for u in db.scalars(select(User).where(User.active.is_(True)).order_by(User.name))
+                  if duty.checks_in(u.role) and (scope is None or set(u.camera_ids or []) & scope)]
+        on_ids = duty.on_duty_ids(db, [g.id for g in guards]) if guards else set()
+    on = [g.name for g in guards if g.id in on_ids]
+    off = [g.name for g in guards if g.id not in on_ids]
+    if not guards:
+        return "There are no guards on the roster."
+    answer = f"{len(on)} on duty" + (f": {', '.join(on)}" if on else "") + f". {len(off)} off duty" + (
+        f": {', '.join(off)}" if off else "") + "."
+    if not on:
+        answer += " Alerts will go to the shift roster until someone checks in."
+    return answer
 
 
 def _audit(user: User, action: str, target: str, detail: dict | None = None) -> None:

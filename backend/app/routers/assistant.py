@@ -1,8 +1,13 @@
-"""The AI assistant: questions about incidents (typed or spoken) and laptop commands."""
+"""The AI assistant: questions about incidents (typed or spoken) and laptop commands.
+
+Every question and command is written to the audit log with its answer (assistant_query and
+assistant_command rows), so Admin and Manager can review what the assistant was asked and said (/activity).
+POST /assistant/speak turns an answer into speech with Rumik Silk (audio/wav).
+"""
 
 import time
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
 
 from app.config import get_settings
@@ -11,9 +16,11 @@ from app.deps import require
 from app.models import User
 from app.schemas import (
     AssistantAnswer, AssistantQueryIn, AssistantVoiceAnswer, CommandIn, CommandOut, ConfirmIn, ConfirmOut, IncidentOut,
+    SpeakIn,
 )
-from app.services import commands
+from app.services import commands, tts
 from app.services.assistant import ask
+from app.services.audit import record
 from app.services.stt import SttUnavailable, transcribe
 from app.ws import manager
 
@@ -22,9 +29,18 @@ router = APIRouter(prefix="/assistant", tags=["assistant"])
 AUDIO_PREFIXES = ("audio/", "video/webm")  # browsers record push-to-talk as audio/webm (sometimes video/webm)
 
 
-def _ask(question: str, user: User) -> AssistantAnswer:
+def _log(user: User, action: str, channel: str, detail: dict) -> None:
+    with SessionLocal() as db:
+        record(db, user, action, channel=channel, detail={k: (v[:1000] if isinstance(v, str) else v)
+                                                          for k, v in detail.items()})
+        db.commit()
+
+
+def _ask(question: str, user: User, channel: str = "dashboard") -> AssistantAnswer:
     with SessionLocal() as db:
         answer, rows, source, ms = ask(db, question, user)
+        _log(user, "assistant_query", channel, {"text": question, "answer": answer, "source": source, "ms": ms,
+                                                "incident_ids": [r.id for r in rows][:50]})
         return AssistantAnswer(answer=answer, incidents=[IncidentOut.from_model(r) for r in rows], source=source,
                                ms=ms)
 
@@ -50,7 +66,7 @@ async def voice(audio: UploadFile = File(...), user: User = Depends(require("ass
         raise HTTPException(status_code=503, detail=f"speech to text is not available: {exc}")
     if not transcript:
         raise HTTPException(status_code=422, detail="no speech heard in the recording")
-    result = await run_in_threadpool(_ask, transcript, user)
+    result = await run_in_threadpool(_ask, transcript, user, "voice")
     return AssistantVoiceAnswer(transcript=transcript, answer=result.answer, incidents=result.incidents,
                                 source=result.source, ms=int((time.perf_counter() - t0) * 1000))
 
@@ -64,6 +80,9 @@ async def _push(notices: list[dict]) -> None:
 async def command(body: CommandIn, user: User = Depends(require("assistant"))) -> CommandOut:
     t0 = time.perf_counter()
     result = await run_in_threadpool(commands.handle, body.text, user)
+    await run_in_threadpool(_log, user, "assistant_command", "voice", {
+        "text": body.text, "intent": result.intent, "status": result.status, "answer": result.answer,
+        "source": result.data.get("source")})
     await _push(result.notices)
     return CommandOut(intent=result.intent, status=result.status, answer=result.answer,
                       confirm_token=result.confirm_token, ms=int((time.perf_counter() - t0) * 1000), data=result.data)
@@ -75,6 +94,20 @@ async def confirm(body: ConfirmIn, user: User = Depends(require("assistant"))) -
     result = await run_in_threadpool(commands.confirm, body.confirm_token, body.confirmed, user)
     if result is None:
         raise HTTPException(status_code=404, detail="nothing to confirm (expired, already used, or not yours)")
+    await run_in_threadpool(_log, user, "assistant_command", "voice", {
+        "text": "yes" if body.confirmed else "no", "intent": result.intent, "status": result.status,
+        "answer": result.answer})
     await _push(result.notices)
     return ConfirmOut(status="done" if result.status == "done" else "refused", answer=result.answer,
                       ms=int((time.perf_counter() - t0) * 1000), data=result.data)
+
+
+@router.post("/speak", responses={200: {"content": {"audio/wav": {}}}})
+async def speak(body: SpeakIn, _: User = Depends(require("assistant"))) -> Response:
+    """The answer read aloud in the Rumik Silk voice. 503 if Rumik is not set up or does not answer;
+    the dashboard can then use the browser's own speech."""
+    try:
+        audio, _ms = await run_in_threadpool(tts.speak, body.text)
+    except tts.TtsUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"text to speech is not available: {exc}")
+    return Response(content=audio, media_type="audio/wav")

@@ -37,6 +37,7 @@ ACTIONS = {
     "view_guard_details",  # guard personal details (Admin only by default)
     "scan_badges",  # badge reader or laptop
     "delegate_cameras",  # create and edit users, but only with cameras and actions this user already has
+    "manage_cameras",  # add, edit, test, start and stop cameras (P22)
 }
 
 BCRYPT_ROUNDS = 10  # about 70 ms per check: fine for a login, slow for someone guessing PINs
@@ -168,3 +169,25 @@ def share_url(name: str) -> str | None:
     """Full public link to a media file, or None when PUBLIC_BASE_URL is not set."""
     base = get_settings().public_base_url.rstrip("/")
     return f"{base}/share/media/{name}?st={sign_share(name)}" if base else None
+
+
+# ---------- signed QR values (duty passes and post codes, P23) ----------
+
+def sign_value(purpose: str, value: int) -> str:
+    """'<value>.<signature>' for a QR code. No expiry: a pass is like a badge; deactivating the user revokes it."""
+    sig = hmac.new(_stream_secret(), f"{purpose}.{value}".encode(), hashlib.sha256).hexdigest()[:STREAM_SIG_LEN]
+    return f"{value}.{sig}"
+
+
+def check_value(purpose: str, token: str) -> int | None:
+    try:
+        value_text, sig = token.strip().split(".")
+        value = int(value_text)
+    except ValueError:
+        return None
+    return value if hmac.compare_digest(sign_value(purpose, value), f"{value}.{sig}") else None
+
+
+def staff_id(user_id: int) -> str:
+    """The ID a person is given in their invitation, e.g. RG-0007."""
+    return f"{get_settings().staff_id_prefix}-{user_id:04d}"

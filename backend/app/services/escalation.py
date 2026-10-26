@@ -11,6 +11,10 @@ Low (ppe, loitering):
     0 s   WhatsApp the zone manager; no calls
     and if the same zone has 3 low incidents within 1 hour, call the Head Guard once
 
+Duty (P23): Head Guards and Guards are called only while checked in on duty. If nobody of that role is on
+duty, the shift roster is called instead, the timeline gets "duty_fallback" and the Head Guards are told
+on WhatsApp once per incident, so nothing is silently dropped.
+
 Each step is a timer job (APScheduler). When anyone acknowledges or closes the incident, stop()
 removes the remaining jobs, drops queued calls and hangs up ringing ones. Each step also re-checks
 the incident status before acting, so a step that slips through never calls after an acknowledgement.
@@ -26,13 +30,13 @@ from zoneinfo import ZoneInfo
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import func, select
 
-from app.config import PRODUCT_NAME, Settings, get_settings, load_cameras
+from app.config import PRODUCT_NAME, Settings, get_settings
 from app.db import SessionLocal
 from app.models import Incident
-from app.services import camera_status
+from app.services import camera_registry, camera_status
 from app.services import incidents as incident_ops
 from app.services.calls import CallService, calls
-from app.services.directory import Contact, contacts_for_role
+from app.services.directory import Contact, contacts_for_role, contacts_on_duty
 from app.services.badges import incident_badge_status
 from app.services.permissions import share_url
 from app.services.whatsapp import WhatsAppService, whatsapp
@@ -83,6 +87,7 @@ class Escalation:
         self.whatsapp = messenger or whatsapp
         self._repeat_called: dict[tuple[str, str], float] = {}  # (camera, zone) -> monotonic time of repeat call
         self._silent_alerted: set[str] = set()
+        self._duty_warned: set[int] = set()  # incidents whose Head Guards were already told nobody is on duty
         self._lock = threading.Lock()
 
     # ---------- lifecycle (API startup/shutdown) ----------
@@ -129,14 +134,32 @@ class Escalation:
         hung = self.calls.hang_up_active(incident_id, except_call_id) if self.calls.mode == "live" else 0
         log.info("incident=%d step=ladder_stopped queued_cancelled=%d hung_up=%d", incident_id, cancelled, hung)
 
-    def _contacts(self, db, who: str, incident: Incident) -> list[Contact]:
+    def _contacts(self, db, who: str, incident: Incident) -> tuple[list[Contact], bool]:
+        """(contacts, fallback): fallback=True when nobody of that role was on duty."""
         s = self.settings
         if who == "zone_manager":
             managers = contacts_for_role(db, s.role_manager, incident.camera_id, incident.zone)
             in_zone = [c for c in managers if c.zone == incident.zone]
-            return (in_zone or managers)[:1]
+            return (in_zone or managers)[:1], False
         role = {"head_guard": s.role_head_guard, "admin": s.role_admin, "manager": s.role_manager}[who]
-        return contacts_for_role(db, role, incident.camera_id, incident.zone)
+        return contacts_on_duty(db, role, incident.camera_id, incident.zone)
+
+    def _duty_fallback(self, db, incident: Incident, who: str, target: Contact) -> None:
+        """Nobody of this role was on duty: note it on the timeline and tell the Head Guards (once per incident)."""
+        label = who.replace("_", " ")
+        incident_ops.add_timeline(incident, "duty_fallback", to=target.name)
+        log.warning("incident=%d nobody on duty as %s: calling %s from the shift roster", incident.id, label,
+                    target.name)
+        with self._lock:
+            if incident.id in self._duty_warned:
+                return
+            self._duty_warned.add(incident.id)
+        head_guards = contacts_for_role(db, self.settings.role_head_guard, incident.camera_id, incident.zone)
+        text = (f"{PRODUCT_NAME} warning: nobody is checked in on duty as {label} for {incident.camera.name}. "
+                f"Calling {target.name} from the shift roster for incident {incident.id}. Please check the team.")
+        for contact in head_guards:
+            if self.whatsapp.send(contact.phone, text, None):
+                incident_ops.add_timeline(incident, "whatsapp_sent", to=contact.name)
 
     def run_step(self, incident_id: int, index: int) -> None:
         t0 = time.perf_counter()
@@ -148,7 +171,7 @@ class Escalation:
                 log.info("incident=%d step=%d skipped: already %s", incident_id, index, incident.status)
                 return
             step = ladder_for(incident.severity, self.settings)[index]
-            contacts = self._contacts(db, step.who, incident)
+            contacts, fallback = self._contacts(db, step.who, incident)
             if not contacts:
                 log.warning("incident=%d step=%d no %s with a phone number on the roster", incident_id, index,
                             step.who)
@@ -159,6 +182,9 @@ class Escalation:
                 target = contacts[0]
                 if index > 0:
                     incident_ops.add_timeline(incident, "escalated", to=target.name)
+                if fallback:
+                    self._duty_fallback(db, incident, step.who, target)
+                if index > 0 or fallback:
                     db.commit()
                     manager.publish_from_thread(incident_ops.to_message(incident))
                 self.calls.place(kind="alert", to_name=target.name, to_phone=target.phone,
@@ -196,11 +222,14 @@ class Escalation:
                 if last is not None and time.monotonic() - last < s.low_repeat_window_min * 60:
                     return
                 self._repeat_called[key] = time.monotonic()
-            contacts = contacts_for_role(db, s.role_head_guard, incident.camera_id, incident.zone)
+            contacts, fallback = contacts_on_duty(db, s.role_head_guard, incident.camera_id, incident.zone)
             if not contacts:
                 log.warning("incident=%d repeat in %s but no Head Guard on the roster", incident_id, incident.zone)
                 return
             target = contacts[0]
+            if fallback:
+                self._duty_fallback(db, incident, "head_guard", target)
+                db.commit()
             log.info("incident=%d zone=%s repeated %d times in %d min: calling %s", incident_id, incident.zone,
                      count, s.low_repeat_window_min, target.name)
         self.calls.place(kind="alert", to_name=target.name, to_phone=target.phone,
@@ -229,7 +258,7 @@ class Escalation:
 
     def check_heartbeats(self) -> None:
         """A camera that was reporting and went silent: WhatsApp the Admin once (again only after it recovers)."""
-        names = {cam.id: cam.name for cam in load_cameras()}
+        names = camera_registry.names()
         for camera_id in camera_status.known_cameras():
             online, _ = camera_status.get(camera_id)
             if online:

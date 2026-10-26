@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from app.config import BACKEND_DIR, get_settings, load_cameras
 from app.db import SessionLocal
-from app.models import Camera, Responder, User, Zone
+from app.models import Camera, Responder, Role, User, Zone
 from app.services.permissions import ACTIONS, hash_pin, verify_pin
 
 log = logging.getLogger("safetyai.seed")
@@ -28,16 +28,44 @@ RESPONDERS_FILE = BACKEND_DIR / "config" / "demo_responders.yaml"
 
 
 def seed_cameras(db: Session) -> int:
+    """Copy cameras.yaml into the database. Each camera gets a number ("camera 6" by voice): the one in the
+    yaml, else the number it already has, else the next free one. Cameras added on the dashboard are kept."""
     cameras = load_cameras()
+    taken = {n for n in db.scalars(select(Camera.number).where(Camera.number.is_not(None)))}
     for cam in cameras:
         row = db.get(Camera, cam.id) or Camera(id=cam.id)
         row.name, row.source, row.port = cam.name, cam.source, cam.port
+        if cam.number is not None and cam.number != row.number:
+            other = db.scalar(select(Camera).where(Camera.number == cam.number, Camera.id != cam.id))
+            if other is not None:
+                other.number = None  # the yaml wins; that camera is renumbered below
+                taken.discard(cam.number)
+                db.flush()
+            row.number = cam.number
+            taken.add(cam.number)
         db.add(row)
+    db.flush()
+    for row in db.scalars(select(Camera).where(Camera.number.is_(None)).order_by(Camera.id)):
+        row.number = next(n for n in range(1, 10_000) if n not in taken)
+        taken.add(row.number)
     # Never deleted here: deleting a camera would also delete its incidents.
     wanted = {cam.id for cam in cameras}
-    for old in db.scalars(select(Camera.id).where(Camera.id.not_in(wanted))):
-        log.warning("camera %s is in the database but no longer in cameras.yaml (left as it is)", old)
+    for old in db.scalars(select(Camera).where(Camera.id.not_in(wanted), Camera.added_by.is_(None))):
+        log.warning("camera %s is in the database but no longer in cameras.yaml (left as it is)", old.id)
     return len(cameras)
+
+
+def seed_roles(db: Session, users_file: Path = USERS_FILE) -> int:
+    """One role template per demo role label, with that user's actions (cameras stay per user).
+    Existing roles are left alone, so an admin's edits survive a re-seed."""
+    raw = yaml.safe_load(users_file.read_text(encoding="utf-8")) or {}
+    count = 0
+    for item in raw.get("users", []):
+        if db.scalar(select(Role).where(Role.name == item["role"])) is None:
+            db.add(Role(name=item["role"], camera_ids=[], actions=sorted(set(item["actions"]))))
+            db.flush()
+            count += 1
+    return count
 
 
 def seed_zones(db: Session, zones_file: Path = ZONES_FILE) -> int:
@@ -125,6 +153,7 @@ def main() -> None:
         db.flush()  # cameras must exist before zones point at them
         zones = seed_zones(db)
         pin_lines = seed_users(db)
+        seed_roles(db)
         db.flush()  # users must exist before responders link to them
         pin_lines += seed_responders(db)
         db.commit()

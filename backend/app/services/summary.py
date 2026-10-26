@@ -26,12 +26,15 @@ def today_window(now: datetime | None = None) -> tuple[datetime, datetime]:
     return datetime.combine(local.date(), time(0, 0), tzinfo=tz).astimezone(timezone.utc), now
 
 
-def build(db: DbSession, user: User, start: datetime, end: datetime) -> dict:
+def build(db: DbSession, user: User, start: datetime, end: datetime, only: list[str] | None = None) -> dict:
+    """only: just these camera ids (still limited to the ones the user may see)."""
     tz = get_settings().timezone
     scope = allowed_cameras(user)
-    cameras = list(db.scalars(select(Camera).order_by(Camera.id)))
+    cameras = list(db.scalars(select(Camera).order_by(Camera.number.nulls_last(), Camera.id)))
     if scope is not None:
         cameras = [c for c in cameras if c.id in scope]
+    if only is not None:
+        cameras = [c for c in cameras if c.id in set(only)]
     camera_ids = [c.id for c in cameras]
 
     incidents = list(db.scalars(
@@ -53,7 +56,7 @@ def build(db: DbSession, user: User, start: datetime, end: datetime) -> dict:
     for cam in cameras:
         online, fps = camera_status.get(cam.id)
         camera_rows.append({
-            "camera_id": cam.id, "name": cam.name, "online": online, "fps": round(fps, 1),
+            "camera_id": cam.id, "number": cam.number, "name": cam.name, "online": online, "fps": round(fps, 1),
             "incidents": sum(1 for inc in incidents if inc.camera_id == cam.id),
             "open": sum(1 for inc in incidents if inc.camera_id == cam.id and inc.status == "open"),
         })
@@ -66,7 +69,7 @@ def build(db: DbSession, user: User, start: datetime, end: datetime) -> dict:
 
     result = {
         "from": start, "to": end,
-        "sector": {"all_cameras": scope is None, "camera_ids": camera_ids},
+        "sector": {"all_cameras": scope is None and only is None, "camera_ids": camera_ids},
         "incidents": {"total": len(incidents), "by_status": by_status, "by_type": by_type},
         "violations": {"restricted_entries": len(entries), "still_open": len(open_entries),
                        "without_badge": sum(1 for inc in entries if _badge(db, inc) == "not_scanned"),
@@ -74,7 +77,7 @@ def build(db: DbSession, user: User, start: datetime, end: datetime) -> dict:
         "cameras": camera_rows,
         "logins": logins,
     }
-    result["text"] = _text(result, tz)
+    result["text"] = _text(result, tz, picked=only is not None, today=start == today_window(end)[0])
     return result
 
 
@@ -88,15 +91,26 @@ def _entry(db: DbSession, inc: Incident) -> dict:
             "badge_status": _badge(db, inc)}
 
 
-def _clock(value: datetime, tz: str) -> str:
+def clock(value: datetime, tz: str) -> str:
     return value.astimezone(ZoneInfo(tz)).strftime("%H:%M")
 
 
-def _text(r: dict, tz: str) -> str:
+def camera_list_text(cams: list[dict]) -> str:
+    """'camera 6' / 'cameras 6, 7 and 8' (by number, or by name when a camera has no number)."""
+    labels = [str(c["number"]) if c.get("number") else c["name"] for c in cams]
+    if len(labels) == 1:
+        return f"camera {labels[0]}"
+    return f"cameras {', '.join(labels[:-1])} and {labels[-1]}"
+
+
+def _text(r: dict, tz: str, picked: bool = False, today: bool = True) -> str:
     cams = r["cameras"]
     offline = [c["name"] for c in cams if not c["online"]]
-    scope = "all cameras" if r["sector"]["all_cameras"] else f"{len(cams)} of your cameras"
-    parts = [f"Summary for {scope} from {_clock(r['from'], tz)} to {_clock(r['to'], tz)}."]
+    if picked and cams:
+        scope = camera_list_text(cams)
+    else:
+        scope = "all cameras" if r["sector"]["all_cameras"] else f"{len(cams)} of your cameras"
+    parts = [f"Summary for {scope} from {clock(r['from'], tz)} to {clock(r['to'], tz)}."]
     v = r["violations"]
     if v["restricted_entries"] == 0:
         parts.append("No violations: no restricted-area entries.")
@@ -107,7 +121,7 @@ def _text(r: dict, tz: str) -> str:
         latest = v["items"][0]
         where = latest["zone"].replace("-", " ") if latest["zone"] else "an unknown zone"
         parts.append(f"{v['restricted_entries']} restricted-area entr{'y' if v['restricted_entries'] == 1 else 'ies'}, "
-                     f"{v['still_open']} still open. Latest at {where} at {_clock(latest['at'], tz)}.")
+                     f"{v['still_open']} still open. Latest at {where} at {clock(latest['at'], tz)}.")
     total = r["incidents"]["total"]
     if total:
         status = ", ".join(f"{n} {s.replace('_', ' ')}" for s, n in sorted(r["incidents"]["by_status"].items()))
@@ -119,5 +133,6 @@ def _text(r: dict, tz: str) -> str:
     elif cams:
         parts.append("All cameras are online.")
     if r["logins"]:
-        parts.append(f"{len(r['logins'])} login{'s' if len(r['logins']) != 1 else ''} today.")
+        parts.append(f"{len(r['logins'])} login{'s' if len(r['logins']) != 1 else ''} "
+                     f"{'today' if today else 'in this period'}.")
     return " ".join(parts)

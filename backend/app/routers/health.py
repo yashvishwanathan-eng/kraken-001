@@ -4,10 +4,9 @@ from typing import Literal
 from fastapi import APIRouter
 from sqlalchemy import text
 
-from app.config import load_cameras
 from app.db import engine
 from app.schemas import CameraHealth, HealthResponse
-from app.services import camera_status, llm
+from app.services import camera_registry, camera_status, llm
 from app.services.calls import calls
 
 router = APIRouter()
@@ -27,6 +26,6 @@ def _check_db() -> Literal["ok", "error"]:
 @router.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     cameras = [CameraHealth(id=cam.id, online=online, fps=fps)
-               for cam in load_cameras() for online, fps in [camera_status.get(cam.id)]]
+               for cam in camera_registry.all_cameras() for online, fps in [camera_status.get(cam.id)]]
     twilio = "ok" if calls.client.configured() else "not_configured"
     return HealthResponse(cameras=cameras, db=_check_db(), twilio=twilio, llm=llm.status())

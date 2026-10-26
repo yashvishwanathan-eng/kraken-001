@@ -5,3 +5,4 @@ __pycache__/
 backend/models/
 backend/media/
 media/
+backend/logs/

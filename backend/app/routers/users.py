@@ -12,13 +12,15 @@ from app.deps import require, require_any
 from app.models import Camera, User
 from app.schemas import UserCreate, UserOut, UserUpdate
 from app.services.audit import record
-from app.services.permissions import ACTIONS, allowed_cameras, end_sessions, find_user_by_pin, hash_pin
+from app.services import roles
+from app.services.permissions import ACTIONS, allowed_cameras, end_sessions, find_user_by_pin, hash_pin, staff_id
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 
 def to_out(user: User) -> UserOut:
-    return UserOut(id=user.id, name=user.name, role=user.role, camera_ids=list(user.camera_ids),
+    return UserOut(id=user.id, staff_id=staff_id(user.id), name=user.name, role=user.role,
+                   camera_ids=list(user.camera_ids),
                    actions=list(user.actions), active=user.active)
 
 
@@ -58,11 +60,12 @@ def list_users(_: User = Depends(require("manage_users"))) -> list[UserOut]:
 
 @router.post("", response_model=UserOut, status_code=201)
 def create_user(body: UserCreate, admin: User = Depends(require_any("manage_users", "delegate_cameras"))) -> UserOut:
-    _delegation_guard(admin, body.camera_ids, body.actions)
     with SessionLocal() as db:
-        _validate(db, body.camera_ids, body.actions, body.pin, None)
-        user = User(name=body.name, role=body.role, camera_ids=sorted(set(body.camera_ids)),
-                    actions=sorted(set(body.actions)), active=body.active, pin_hash=hash_pin(body.pin))
+        camera_ids, actions = roles.defaults(db, body.role, body.camera_ids, body.actions)
+        _delegation_guard(admin, camera_ids, actions)
+        _validate(db, camera_ids, actions, body.pin, None)
+        user = User(name=body.name, role=body.role, camera_ids=camera_ids,
+                    actions=actions, active=body.active, pin_hash=hash_pin(body.pin))
         db.add(user)
         db.flush()
         record(db, admin, "user_create", target=f"user:{user.id}", detail={"name": user.name, "role": user.role})

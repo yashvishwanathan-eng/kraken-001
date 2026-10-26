@@ -10,11 +10,12 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import PRODUCT_NAME, get_settings, media_root
 from app.routers import (
-    assistant, audit, auth, badges, broadcast, cameras, events, guards, health, internal, invites, responders,
-    roll_call, share, sites, stats, stream, summary, twilio, users, zones,
+    activity, assistant, audit, auth, badges, broadcast, cameras, duty, events, guards, health, internal, invites,
+    overview, responders, roles, roll_call, share, sites, stats, stream, summary, twilio, users, zones,
 )
 from app.services.calls import calls
 from app.services.escalation import escalation
+from app.services.workers import workers
 from app.ws import manager
 
 settings = get_settings()
@@ -29,9 +30,13 @@ async def lifespan(_: FastAPI):
     manager.loop = asyncio.get_running_loop()  # lets timer threads push WebSocket updates
     escalation.start_background()  # call-ladder timers, 18:00 digest, camera heartbeat watchdog
     calls.start()  # one dispatcher thread, 1 new call per second
+    escalation.scheduler.add_job(workers.check, "interval", seconds=10, id="worker-watchdog", replace_existing=True)
+    if settings.workers_autostart:
+        log.info("started %d camera workers", workers.start_enabled())
     log.info("%s API started: calls=%s whatsapp=%s", PRODUCT_NAME, calls.mode,
              escalation.whatsapp.mode)
     yield
+    workers.stop_all()
     calls.stop()
     escalation.shutdown()
 
@@ -70,5 +75,6 @@ async def unexpected_error(request: Request, exc: Exception) -> JSONResponse:
 app.mount("/media", StaticFiles(directory=media_root()), name="media")
 
 for module in (health, auth, users, cameras, stream, zones, events, stats, audit, responders, roll_call, broadcast,
-               assistant, twilio, share, internal, invites, summary, sites, guards, badges):
+               assistant, twilio, share, internal, invites, summary, sites, guards, badges, roles, duty, overview,
+               activity):
     app.include_router(module.router)

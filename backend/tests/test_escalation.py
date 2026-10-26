@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.models import Call, Incident
 from app.services.calls import CallService
 from app.services.escalation import Escalation, ladder_for
-from tests.conftest import make_incident
+from tests.conftest import check_in, make_incident
 
 
 class FakeJob:
@@ -59,6 +59,7 @@ def test_ladders_match_the_rules():
 
 
 def test_critical_ladder_calls_head_guard_then_admin_then_manager(ladder, roster):
+    check_in(roster, "Ravi Kumar")  # the Head Guard is on duty (see test_duty.py for the off-duty fallback)
     incident_id = make_incident(roster, type_="fire", severity="critical")
     ladder.start(incident_id)
     jobs = ladder.scheduler.jobs

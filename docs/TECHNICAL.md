@@ -246,6 +246,25 @@ Files are re-read automatically when they change. No restart is needed.
 - **Watchdog.** Workers post a heartbeat every 5 s. Every 10 s the API checks each camera. A camera silent for 30 s gets one WhatsApp to the Admin ("camera X has been silent for 30 s"). It is not repeated until the camera has come back and gone silent again.
 - **Digest.** At 18:00 IST, a WhatsApp goes to every Manager with the low-severity incidents of the last 24 h, counted by type and zone.
 
+### 4.10 Adding and installing a camera (P22)
+1. `POST /cameras/test {source}` opens the address with OpenCV on a side thread and reads one frame (gives up after `CAMERA_PROBE_TIMEOUT_S`).
+2. `POST /cameras` tests again (unless `test_first=false`), saves the row with the next free port (from `FIRST_WORKER_PORT`) and number, adds the camera to every user of `role_names`, and audits `camera_add`.
+3. With `start=true`, `services/workers.py` launches `python -m worker.run_worker --camera <id>` as a child process; output goes to `logs/worker-<id>.log` (`GET /cameras/{id}/worker-log`).
+4. The worker reads its camera from the database (`services/camera_registry.py`; cameras.yaml only if the database is down), so nothing is edited by hand. Its heartbeat makes it online in `/health`, `/cameras` and `/overview`.
+5. `WORKERS_AUTOSTART=true`: the API starts every enabled camera at boot and restarts a crashed worker after `WORKER_RESTART_S`. A worker someone stopped is not restarted. Stopping the API stops its workers.
+
+### 4.11 Duty check-in and the call ladder (P23)
+- A guard's pass is `"<user id>.<HMAC>"` signed with `STREAM_SECRET` (set it, or passes change at every restart). A post code is the same for an area id, inside a `DASHBOARD_URL/check-in?post=` link.
+- `services/duty.py`: the latest `duty_events` row per guard; on duty = "in" and under `DUTY_MAX_H` old.
+- `services/directory.contacts_on_duty()` returns on-duty people of a role. If there are none, it returns the shift roster with `fallback=True`; the ladder then writes `duty_fallback` on the timeline and WhatsApps the Head Guards once per incident. Only `DUTY_ROLES` check in; Admin and Manager are always callable.
+- Alert everybody, broadcast and "call zone" use `on_shift_contacts_with_fallback()`: off-duty guards are left out unless no guard at all is on duty.
+
+### 4.12 Activity, overview, usage and voice summaries (P24)
+- The audit log now also holds `assistant_query` and `assistant_command` rows (text, answer, intent, status, source) and `camera_view` rows (from the stream proxy, one per user and camera per `CAMERA_VIEW_DEDUPE_S`). `/activity` groups them per person. View: `view_audit` only.
+- `/overview` and `/usage` are computed on request; nothing extra is stored. Summary history is any past window of `/summary?from&to`, rebuilt from the incidents.
+- Voice summaries: the fast path matches "summary/recap", then `summary_window()` reads "today", "yesterday", "past/last N hours/minutes" and `summary_cameras()` reads "cameras 6, 7 and 8". Unknown or hidden camera numbers are named as "not found".
+- `services/tts.py`: Rumik Silk over HTTP (`POST {RUMIK_GATEWAY_URL}/v1/tts`, Bearer key, WAV back), 8 s timeout and one retry. `python -m tools.check_rumik` checks the key without printing it.
+
 ## 5. Security model
 
 | Area | How it is protected |
@@ -428,6 +447,8 @@ Manual checks still to do on your laptop (they can't be automated here):
 | Default branch `main` | Not set | GitHub → Settings → Default branch |
 | Offline speech to text | Untested here (model host blocked in this sandbox) | Run once online on your laptop |
 | Real cameras | Untested | Webcam and phone test |
+| Rumik voice | Built, untested (no key in the sandbox) | Add `RUMIK_GATEWAY_URL` next to the key, run `python -m tools.check_rumik` |
+| Duty QR screens | Backend only | The teammate builds "My pass", the scanner page and `/check-in?post=` |
 | Wake word | Not built (lowest priority) | Push-to-talk works; the frontend sends audio to `/assistant/voice` |
 | Pre-recorded "on it" sound | Frontend side | The teammate plays it the moment push-to-talk ends |
 | Tamil/Hindi in calls | Not at call start (by decision) | Optional later |

@@ -23,7 +23,7 @@ Severity = Literal["critical", "high", "low"]
 Status = Literal["open", "acknowledged", "resolved", "false_alarm"]
 TimelineAction = Literal[
     "detected", "call_placed", "call_no_answer", "acknowledged", "escalated", "whatsapp_sent", "resolved",
-    "false_alarm", "roll_call_responded", "roll_call_safe", "alert_all", "command",
+    "false_alarm", "roll_call_responded", "roll_call_safe", "alert_all", "command", "duty_fallback",
 ]
 Via = Literal["keypad", "voice", "dashboard"]
 
@@ -122,6 +122,7 @@ class MeResponse(BaseModel):
 
 class UserOut(BaseModel):
     id: int
+    staff_id: str  # e.g. RG-0007, sent in the invitation email
     name: str
     role: str
     camera_ids: list[str]
@@ -132,8 +133,8 @@ class UserOut(BaseModel):
 class UserCreate(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=120)]
     role: Annotated[str, Field(min_length=1, max_length=32)]
-    camera_ids: list[str] = []
-    actions: list[str] = []
+    camera_ids: list[str] | None = None  # None: the role's cameras (P22 roles), else none
+    actions: list[str] | None = None  # None: the role's actions, else none
     active: bool = True
     pin: Pin
 
@@ -173,6 +174,7 @@ class ZoneIn(BaseModel):
 
 class CameraOut(BaseModel):
     id: str
+    number: int | None  # "camera 6" by voice
     name: str
     stream_url: str
     online: bool
@@ -210,6 +212,7 @@ class AuditRow(BaseModel):
     action: str
     target: str | None
     channel: Literal["dashboard", "phone", "voice"]
+    detail: dict | None = None  # e.g. the question and answer of an assistant_query
 
 
 # ---------- responders ----------
@@ -335,13 +338,14 @@ class InviteCreate(BaseModel):
     name: Annotated[str, Field(min_length=1, max_length=120)]
     email: Annotated[str, Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=254)]
     role: Annotated[str, Field(min_length=1, max_length=32)]
-    camera_ids: list[str] = []
-    actions: list[str] = []
+    camera_ids: list[str] | None = None  # None: the role's cameras
+    actions: list[str] | None = None  # None: the role's actions
 
 
 class InviteOut(BaseModel):
     invite_id: int
     user_id: int
+    staff_id: str
     name: str
     email: str
     role: str
@@ -394,6 +398,7 @@ class SummaryViolations(BaseModel):
 
 class SummaryCamera(BaseModel):
     camera_id: str
+    number: int | None = None
     name: str
     online: bool
     fps: float
@@ -533,3 +538,256 @@ class PresentGuard(BaseModel):
 class PresenceOut(BaseModel):
     at: datetime
     present: list[PresentGuard]
+
+
+# ---------- P22. Cameras: add, test, start; roles ----------
+
+CameraSource = Annotated[str, Field(min_length=1, max_length=255,
+                                    description="0 (webcam), http://PHONE-IP:8080/video, rtsp://..., or a file path")]
+CameraId = Annotated[str, Field(pattern=r"^[a-z0-9][a-z0-9-]{1,63}$", description="lowercase letters, digits, -")]
+
+
+class CameraTestIn(BaseModel):
+    source: CameraSource
+
+
+class CameraTestOut(BaseModel):
+    ok: bool
+    width: int | None
+    height: int | None
+    ms: int
+    error: str | None
+
+
+class CameraCreate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)]
+    source: CameraSource
+    id: CameraId | None = None  # default: made from the name, e.g. cam-loading-bay
+    number: Annotated[int, Field(ge=1, le=9999)] | None = None  # default: the next free number
+    area_id: int | None = None
+    role_names: list[str] = []  # give the camera to every user with these roles
+    test_first: bool = True  # read one frame first; 422 if the camera does not answer
+    start: bool = True  # start its worker straight away
+
+
+class CameraUpdate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=120)] | None = None
+    source: CameraSource | None = None
+    number: Annotated[int, Field(ge=1, le=9999)] | None = None
+    enabled: bool | None = None
+
+
+class WorkerStatus(BaseModel):
+    managed: bool  # started by the API (False: started by hand, or not running)
+    running: bool
+    pid: int | None
+    started_at: UtcDatetime | None
+    exit_code: int | None
+
+
+class CameraAdminOut(BaseModel):
+    id: str
+    number: int | None
+    name: str
+    source: str
+    port: int
+    enabled: bool
+    area_id: int | None
+    added_by: str | None  # None: from cameras.yaml
+    online: bool
+    fps: float
+    worker: WorkerStatus
+
+
+class WorkerLogOut(BaseModel):
+    camera_id: str
+    lines: list[str]
+
+
+class RoleIn(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=32)]
+    description: Annotated[str, Field(max_length=255)] | None = None
+    camera_ids: list[str] = []
+    actions: list[str] = []
+
+
+class RoleUpdate(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=32)] | None = None
+    description: Annotated[str, Field(max_length=255)] | None = None
+    camera_ids: list[str] | None = None
+    actions: list[str] | None = None
+
+
+class RoleOut(BaseModel):
+    id: int
+    name: str
+    description: str | None
+    camera_ids: list[str]
+    actions: list[str]
+    users: int  # how many users have this role
+
+
+# ---------- P23. Duty check-in ----------
+
+DutyAction = Literal["in", "out", "toggle"]
+
+
+class DutyPassOut(BaseModel):
+    user_id: int
+    staff_id: str
+    name: str
+    pass_token: str  # what the QR code holds
+    qr_png: str  # data:image/png;base64,...
+
+
+class DutyPostQrOut(BaseModel):
+    area_id: int
+    area_name: str
+    link: str  # DASHBOARD_URL/check-in?post=...
+    post_token: str
+    qr_png: str
+
+
+class DutyScanIn(BaseModel):
+    pass_token: Annotated[str, Field(min_length=3, max_length=100)]
+    action: DutyAction = "toggle"
+    area_id: int | None = None
+
+
+class DutyCheckIn(BaseModel):
+    post_token: Annotated[str, Field(min_length=3, max_length=100)]
+    action: DutyAction = "toggle"
+
+
+class DutySetIn(BaseModel):
+    user_id: int
+    action: Literal["in", "out"]
+
+
+class DutyEventOut(BaseModel):
+    user_id: int
+    name: str
+    action: Literal["in", "out"]
+    method: Literal["pass_scan", "post_qr", "dashboard", "voice"]
+    at: UtcDatetime
+    area_id: int | None
+    by: str
+
+
+class DutyPerson(BaseModel):
+    user_id: int
+    staff_id: str
+    name: str
+    role: str
+    on_duty: bool
+    since: UtcDatetime | None  # time of the latest check-in or check-out
+    method: str | None
+    area_id: int | None
+    post: str | None
+    equipment: str | None
+
+
+class DutyBoardOut(BaseModel):
+    on_duty: list[DutyPerson]
+    off_duty: list[DutyPerson]
+
+
+# ---------- P24. Overview, activity, data usage ----------
+
+class OverviewCamera(BaseModel):
+    id: str
+    number: int | None
+    name: str
+    online: bool
+    fps: float
+    enabled: bool
+    worker_running: bool
+
+
+class OverviewProblem(BaseModel):
+    kind: Literal["incident", "camera_offline", "no_guard_on_duty"]
+    severity: Literal["critical", "high", "low"]
+    text: str
+    incident_id: int | None = None
+    camera_id: str | None = None
+
+
+class OverviewOut(BaseModel):
+    at: UtcDatetime
+    cameras_total: int
+    cameras_online: int
+    cameras_offline: int
+    workers_running: int
+    cameras: list[OverviewCamera]
+    open_incidents: int
+    open_by_severity: dict[str, int]
+    problems_now: list[OverviewProblem]
+    past_problems: list[DayCount]  # incidents per IST day, last 7 days
+    past_total_7d: int
+    guards_on_duty: list[str]
+    guards_off_duty: list[str]
+    ok: bool  # True when problems_now is empty
+    text: str
+
+
+class ActivityUser(BaseModel):
+    user_id: int | None
+    user: str
+    role: str | None
+    actions: int
+    ai_questions: int
+    ai_commands: int
+    camera_views: int
+    cameras_viewed: list[str]
+    last_at: UtcDatetime | None
+
+
+class ActivityAi(BaseModel):
+    at: UtcDatetime
+    user: str
+    channel: Literal["dashboard", "phone", "voice"]
+    kind: Literal["question", "command"]
+    text: str
+    answer: str
+    intent: str | None
+    status: str | None
+    source: str | None
+
+
+class ActivityView(BaseModel):
+    at: UtcDatetime
+    user: str
+    camera_id: str
+
+
+class ActivityOut(BaseModel):
+    from_: datetime = Field(alias="from")
+    to: datetime
+    users: list[ActivityUser]
+    ai: list[ActivityAi]
+    camera_views: list[ActivityView]
+
+    model_config = {"populate_by_name": True}
+
+
+class UsageFiles(BaseModel):
+    count: int
+    bytes: int
+
+
+class UsageOut(BaseModel):
+    media_total_bytes: int
+    snapshots: UsageFiles
+    clips: UsageFiles
+    other_media: UsageFiles
+    worker_logs: UsageFiles
+    disk_free_bytes: int
+    disk_total_bytes: int
+    database_bytes: int | None  # None if the database cannot say
+    rows: dict[str, int]
+    incidents_by_day: list[DayCount]  # last 30 IST days
+    ai_queries_by_day: list[DayCount]
+
+
+class SpeakIn(BaseModel):
+    text: Annotated[str, Field(min_length=1, max_length=1000)]

@@ -194,7 +194,8 @@ def test_status_report_and_show_camera(roster):
     report = client.post("/assistant/command", json={"text": "status report"}, headers=headers).json()
     assert report["answer"].startswith("1 open incident (1 critical)")
     shown = client.post("/assistant/command", json={"text": "show camera 2"}, headers=headers).json()
-    assert shown["data"] == {"camera_id": "cam-webcam"}  # cameras sorted by id: cam-phone, cam-webcam
+    # the seed numbers cameras by id: 1 cam-phone, 2 cam-webcam
+    assert shown["data"] == {"camera_id": "cam-webcam", "camera_ids": ["cam-webcam"]}
 
 
 def test_command_permissions(roster):

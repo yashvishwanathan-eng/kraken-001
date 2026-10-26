@@ -42,12 +42,12 @@ Status tags:
 | POST | /invites/{invite_id}/revoke | live (P19) | | cancels a pending invitation; 409 otherwise |
 | GET | /invites/link/{token} | live (P19) | | public: `{name, email, role, expires_at}`; 404 if unknown, used, expired or revoked |
 | POST | /invites/link/{token}/accept | live (P19) | `{pin}` | public: sets the PIN, activates the account, returns `{token, user}` (same as login). One use. 409 if the PIN is taken. |
-| GET | /summary | live (P20) | query `from`, `to` (optional; default today from local midnight IST) | `{from, to, sector:{all_cameras, camera_ids[]}, incidents:{total, by_status, by_type}, violations:{restricted_entries, still_open, items[]}, cameras[], logins[], text}`. `logins` only for users with view_audit. 422 if `to` is not after `from`. |
+| GET | /summary | live (P20) | query `from`, `to` (optional; default today from local midnight IST), `cameras` (P22: comma-separated ids, optional) | `{from, to, sector:{all_cameras, camera_ids[]}, incidents:{total, by_status, by_type}, violations:{restricted_entries, still_open, items[]}, cameras[], logins[], text}`. `logins` only for users with view_audit. 422 if `to` is not after `from`. |
 | GET | /health | live | | `{cameras:[{id,online,fps}], db, twilio, llm}`. `db`: ok, error, not_checked. `twilio`: ok, not_configured, error, not_checked. `llm`: ok, ollama_only, error, not_checked. |
 | POST | /auth/pin | live | `{pin}` | `{token, user:{id,name,role}}` |
 | GET | /me | live | | `{id, name, role, camera_ids[], actions[]}` |
 | GET, POST, PUT, DELETE | /users | live | `{id,name,role,camera_ids[],actions[],active,pin}`; `pin` is write-only | Admin only. Response never includes `pin`. |
-| GET | /cameras | live | | `[{id,name,stream_url,online,fps,zones:[{id,name,kind,polygon:[[x,y],...]}]}]`. `stream_url` is signed (see Stream tokens). `kind`: restricted, ppe, work. Filtered by the caller's `camera_ids`. |
+| GET | /cameras | live | | `[{id,number,name,stream_url,online,fps,zones:[{id,name,kind,polygon:[[x,y],...]}]}]`. `stream_url` is signed (see Stream tokens). `kind`: restricted, ppe, work. Filtered by the caller's `camera_ids`. |
 | GET | /cameras/{id}/stream-url | live | | `{stream_url}`: a fresh signed URL for that camera, same format and rules as `/cameras`. 403 if not delegated. |
 | GET | /stream/{camera_id}?st=<token> | live | Query: `st` (stream token) | MJPEG, `multipart/x-mixed-replace`. See Stream tokens. |
 | GET | /events | live | Query: type, camera, severity, status, from, to (ISO UTC) | List of incident objects, newest first. Filtered by the caller's cameras. |
@@ -64,7 +64,25 @@ Status tags:
 | POST | /assistant/voice | live | multipart audio | `{transcript, answer, incidents[], source, ms}` |
 | POST | /assistant/command | live | `{text}` | `{intent, status, answer, confirm_token, ms}`. `status`: done, needs_confirmation, unknown. |
 | POST | /assistant/confirm | live | `{confirm_token, confirmed}` | `{status, answer, ms}`. Only confirms the big actions: call everyone, evacuate, call fire station. |
-| GET | /audit-log | live | Query: user, action, channel (dashboard, phone, voice), from, to | Rows `{at, user, action, target, channel}`, newest first. Admin and Manager only. |
+| GET | /audit-log | live | Query: user, action, channel (dashboard, phone, voice), from, to | Rows `{at, user, action, target, channel, detail}`, newest first. Admin and Manager only. `detail` (P24) is an object or null. |
+| GET | /cameras/admin | live (P22) | | `[{id, number, name, source, port, enabled, area_id, added_by, online, fps, worker:{managed, running, pid, started_at, exit_code}}]` (manage_cameras) |
+| POST | /cameras/test | live (P22) | `{source}` | `{ok, width, height, ms, error}`: reads one frame; nothing is saved (manage_cameras) |
+| POST | /cameras | live (P22) | `{name, source, id?, number?, area_id?, role_names[], test_first=true, start=true}` | 201 camera as in `/cameras/admin`. 422 if the test fails; 409 if the id or number is taken (manage_cameras) |
+| PUT | /cameras/{id} | live (P22) | `{name?, source?, number?, enabled?}` | camera as in `/cameras/admin`. Disabling stops its worker. No DELETE (it would delete incidents). |
+| POST | /cameras/{id}/start, /stop, /restart | live (P22) | | camera as in `/cameras/admin`; 409 to start a disabled camera |
+| GET | /cameras/{id}/worker-log | live (P22) | | `{camera_id, lines[]}`: the worker's last printed lines |
+| GET, POST, PUT, DELETE | /roles, /roles/{id} | live (P22) | `{name, description?, camera_ids[], actions[]}`; PUT partial | `{id, name, description, camera_ids[], actions[], users}` (manage_users; GET also delegate_cameras) |
+| GET | /duty | live (P23) | | `{on_duty:[person], off_duty:[person]}`, person `{user_id, staff_id, name, role, on_duty, since, method, area_id, post, equipment}` |
+| GET | /duty/events | live (P23) | Query: from, to, user_id, limit | `[{user_id, name, action, method, at, area_id, by}]` (view_audit or manage_guards) |
+| GET | /duty/pass/{user_id} | live (P23) | | `{user_id, staff_id, name, pass_token, qr_png}` (the guard themselves, or manage_guards) |
+| GET | /duty/post-qr | live (P23) | Query: area_id | `{area_id, area_name, link, post_token, qr_png}` (manage_guards or manage_sites) |
+| POST | /duty/scan | live (P23) | `{pass_token, action?, area_id?}` | 201 duty event (scan_badges). 404 if the pass is not valid |
+| POST | /duty/check-in | live (P23) | `{post_token, action?}` | 201 duty event for the caller. 404 if the code is not valid |
+| POST | /duty/set | live (P23) | `{user_id, action: in \| out}` | 201 duty event (manage_guards) |
+| GET | /overview | live (P24) | | `{at, cameras_total, cameras_online, cameras_offline, workers_running, cameras[], open_incidents, open_by_severity, problems_now[], past_problems[{date,count}], past_total_7d, guards_on_duty[], guards_off_duty[], ok, text}` |
+| GET | /activity | live (P24) | Query: from, to (default last 24 h), user | `{from, to, users[], ai[], camera_views[]}` (view_audit: Admin and Manager) |
+| GET | /usage | live (P24) | | `{media_total_bytes, snapshots, clips, other_media, worker_logs, disk_free_bytes, disk_total_bytes, database_bytes, rows{}, incidents_by_day[], ai_queries_by_day[]}` (view_audit) |
+| POST | /assistant/speak | live (P24) | `{text}` | `audio/wav` in the Rumik Silk voice; 503 if Rumik is not set up or does not answer |
 | GET | /stats | live | | `{by_type:{...}, by_day:[{date,count}], open, resolved, avg_response_s}` |
 | POST | /twilio/voice, /twilio/gather, /twilio/status | live | Twilio webhooks | Twilio only. TwiML responses. |
 | POST | /internal/incidents/{id}/created | live | Header `X-Internal-Key` | Worker to API only. |
@@ -93,7 +111,7 @@ Status tags:
 - `status`: open, acknowledged, resolved, false_alarm
 - `channel`: dashboard, phone, voice
 - Timeline `action`:
-  - **(live)**: detected, call_placed, call_no_answer, escalated, whatsapp_sent, acknowledged, resolved, false_alarm, roll_call_responded, roll_call_safe, alert_all
+  - **(live)**: detected, call_placed, call_no_answer, escalated, whatsapp_sent, acknowledged, resolved, false_alarm, roll_call_responded, roll_call_safe, alert_all, duty_fallback (P23)
   - **(confirmed, not used yet)**: command
 - Timeline `via` (on acknowledged): keypad, voice, dashboard
 
@@ -129,7 +147,12 @@ Gate 2 needed these details, which the contract did not settle. The backend does
 
 - **P21. Sites, guards, badges, delegation.** Sites hold buildings, buildings hold rooms or areas, and a camera can be placed in an area (`PUT /cameras/{id}/area`). `GET /sites` returns the tree with each area's cameras. Guard profiles (`GET /guards`, `GET|PUT /guards/{user_id}/profile`) hold position, post, site, equipment and whether the guard has a phone. Personal details (badge number, badge ID, security number, emergency contact) are encrypted at rest. Only the admin (`view_guard_details`) can read them; saving replaces them entirely. The list shows names and posts only, to people who share a camera with the caller. A badge read (`POST /badges/scan`, `scan_badges`) finds the guard by the badge number, which is stored as a keyed hash. `GET /presence?at=` lists who was present where, by names, for areas in the caller's cameras. A restricted-area entry with no badge scan in its area is marked `not_scanned`: the alert text says so and the sector summary counts it. Delegation: a user with `delegate_cameras` (and no `manage_users`) can create or edit people only with cameras they can see and actions they hold. New actions: `manage_sites`, `manage_guards`, `view_guard_details`, `scan_badges`, `delegate_cameras`. Needs `DATA_KEY` in `.env`; saving personal details without it returns 503.
 
+- **P22. Cameras, roles and staff IDs.** Every camera has a `number` ("camera 6" by voice); numbers are unique, cameras.yaml may set them, and new cameras get the next one. An admin with `manage_cameras` tests an address (`POST /cameras/test`), adds the camera (`POST /cameras`), and the API starts its worker process; workers read cameras from the database, so no file is edited. `role_names` gives the new camera to every user with those roles. Roles (`/roles`) are templates: a new user or invitation with that role and no `camera_ids`/`actions` gets the role's lists, and editing a role adds and removes the difference on its users (each user's extras stay). `/users`, `/invites` and the invitation email carry `staff_id` (e.g. `RG-0007`). `UserCreate` and `InviteCreate` `camera_ids`/`actions` are now optional. New action: `manage_cameras`.
+- **P23. Duty check-in.** Head Guards and Guards (`DUTY_ROLES`) check in and out by QR: the control room scans the guard's personal pass (`/duty/scan`), or the guard scans the post's printed QR with their phone (`/duty/check-in`), or a supervisor sets it (`/duty/set`). A scan toggles unless `action` says in or out. On duty = latest event is "in" and under `DUTY_MAX_H` old. The call ladder, alert everybody, broadcast and "call zone" call only on-duty guards. If nobody of the needed role is on duty, the shift roster is called instead, the timeline gets `duty_fallback` and the Head Guards get a WhatsApp warning, so nothing is dropped. Admins and managers do not check in. `/ws/events` sends `{"kind":"duty", user_id, name, action, method, at, area_id, by}` on every change.
+- **P24. Overview, activity, usage, voice.** `/overview` is the main dashboard in one call, scoped to the caller's cameras: `problems_now[]` items are `{kind: incident | camera_offline | no_guard_on_duty, severity, text, incident_id?, camera_id?}`. `/activity` is for Admin and Manager only (a Head Guard gets 403): every assistant question and command with its answer, every camera feed opened (one row per user and camera per 5 minutes), and per-person totals, including the admin's own. The assistant does not learn from use; this is a record. `/assistant/command` understands summaries ("summary for today", "for the past hour", "for cameras 6, 7 and 8 for the past hour", "yesterday"), "who is on duty", and "show cameras 3, 4 and 12" (`data.camera_ids`). `/assistant/speak` reads a reply in the Rumik Silk voice.
+
 ## Changelog
+- 26 Oct: P22 (adding and installing cameras, camera numbers, roles, staff IDs), P23 (duty check-in by QR, off-duty guards not called, roster fallback with `duty_fallback`) and P24 (overview, activity log, data usage, voice summaries, Rumik voice) are live on the backend. Additive except: `UserCreate`/`InviteCreate` lists became optional. The frontend builds the screens.
 - 25 Oct: P21 added: sites and areas, guard profiles with encrypted personal details, badge scans, presence, and manager delegation. Endpoints are live.
 - 25 Oct: P19 (invitations by email, with a link and a QR code) and P20 (sector summaries) are live on the backend for the frontend to build. P19 and P20 are agreed by Kirito; the frontend builds the screens.
 - 18 Oct: added the endpoints above. `POST /events/{id}/ack` no longer takes `by`.

@@ -18,9 +18,10 @@ import cv2
 import numpy as np
 from sqlalchemy import select
 
-from app.config import get_settings, load_cameras
+from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Zone
+from app.services.camera_registry import all_cameras
 from worker.buffer import RingBuffer
 from worker.capture import LatestFrameCapture
 from worker.detectors import BagDetector, Person, PersonPoseTracker, hip_y, optional_detector, torso_angle_deg
@@ -75,7 +76,7 @@ def annotate(image: np.ndarray, zones: list[ZoneDef], people: list[Person], fps_
 
 def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     settings = get_settings()
-    cameras = {cam.id: cam for cam in load_cameras()}
+    cameras = {cam.id: cam for cam in all_cameras()}  # database first (dashboard-added cameras), then yaml
     if camera_id not in cameras:
         log.error("unknown camera %s; known: %s", camera_id, ", ".join(cameras))
         return 2

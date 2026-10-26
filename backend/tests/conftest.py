@@ -138,3 +138,15 @@ def make_incident(db, camera_id="cam-webcam", type_="access", severity="high", z
     db.add(TimelineEvent(incident_id=incident.id, at=started, action="detected"))
     db.commit()
     return incident.id
+
+
+def check_in(db, name: str, action: str = "in") -> None:
+    """Put a demo guard on (or off) duty, as a QR scan would."""
+    from sqlalchemy import select
+
+    from app.models import User
+    from app.services import duty
+
+    user = db.scalar(select(User).where(User.name == name))
+    duty.set_duty(db, user, action, "dashboard", "test")
+    db.commit()

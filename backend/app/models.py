@@ -18,6 +18,9 @@ class Camera(Base):
     port: Mapped[int] = mapped_column(Integer)
     area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True,
                                                 index=True)  # which room or area it watches
+    number: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)  # "camera 6" by voice
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")  # False: worker not started
+    added_by: Mapped[str | None] = mapped_column(String(120), nullable=True)  # None: from cameras.yaml
 
     zones: Mapped[list["Zone"]] = relationship(back_populates="camera", cascade="all, delete-orphan")
 
@@ -257,3 +260,36 @@ class BadgeScan(Base):
     area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True,
                                                 index=True)
     reader: Mapped[str] = mapped_column(String(120), default="")  # which reader or laptop did the scan
+
+
+class Role(Base):
+    """A role template: the cameras and actions everyone with this role label gets.
+
+    Users keep their own lists (permissions stay data on the user). Changing a role's cameras or actions
+    adds and removes the difference on every user with that role, and leaves each user's extras alone.
+    """
+
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(32), unique=True)
+    description: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    camera_ids: Mapped[list[str]] = mapped_column(JSON, default=list)
+    actions: Mapped[list[str]] = mapped_column(JSON, default=list)
+
+
+class DutyEvent(Base):
+    """A guard going on or off duty: a QR pass scan, a post QR scanned by the guard's phone, or the dashboard.
+
+    The latest event per guard decides: "in" (recent) = on duty and called; "out" or nothing = off duty.
+    """
+
+    __tablename__ = "duty_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    action: Mapped[str] = mapped_column(String(8))  # in, out
+    method: Mapped[str] = mapped_column(String(16))  # pass_scan, post_qr, dashboard, voice
+    area_id: Mapped[int | None] = mapped_column(ForeignKey("areas.id", ondelete="SET NULL"), nullable=True)
+    by_name: Mapped[str] = mapped_column(String(120))  # who recorded it (the guard, or the person scanning)

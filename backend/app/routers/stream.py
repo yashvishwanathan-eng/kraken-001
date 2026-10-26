@@ -5,6 +5,8 @@ The worker's own port listens on 127.0.0.1 only; this proxy is the only way in f
 """
 
 import logging
+import threading
+import time
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query
@@ -12,14 +14,31 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
+from app.config import get_settings
 from app.db import SessionLocal
 from app.models import Camera, User
+from app.services.audit import record
 from app.services.permissions import can_see, check_stream_token
 
 router = APIRouter(tags=["stream"])
 log = logging.getLogger("safetyai.stream")
 
 WORKER_CONNECT_TIMEOUT_S = 3.0
+
+_last_view: dict[tuple[int, str], float] = {}  # (user, camera) -> monotonic time of the last camera_view row
+_view_lock = threading.Lock()
+
+
+def _log_view(db, user: User, camera_id: str) -> None:
+    """One camera_view audit row per user and camera every CAMERA_VIEW_DEDUPE_S (the <img> reconnects often)."""
+    now = time.monotonic()
+    with _view_lock:
+        last = _last_view.get((user.id, camera_id))
+        if last is not None and now - last < get_settings().camera_view_dedupe_s:
+            return
+        _last_view[(user.id, camera_id)] = now
+    record(db, user, "camera_view", target=f"camera:{camera_id}")
+    db.commit()
 
 
 def _authorise(camera_id: str, st: str) -> int:
@@ -36,6 +55,7 @@ def _authorise(camera_id: str, st: str) -> int:
             raise HTTPException(status_code=404, detail=f"camera {camera_id} not found")
         if not can_see(user, camera_id):
             raise HTTPException(status_code=403, detail=f"camera {camera_id} is not delegated to you")
+        _log_view(db, user, camera_id)
         return camera.port
 
 
