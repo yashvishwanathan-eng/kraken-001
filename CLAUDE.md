@@ -20,7 +20,7 @@ Pitch: "Every factory has cameras nobody watches. Most AI adds a dashboard nobod
 7. Every model, dataset, library and external API used gets a line in `docs/disclosures.md` (event rule 9).
 8. Machine: Windows 11, Intel i7-13620H, 16 GB RAM, NO NVIDIA GPU. Never suggest CUDA. Commands in PowerShell.
 9. Learning first: Kirito is new to computer vision and async code. Before building a new concept, explain it in plain words and run a tiny example in the scratchpad (never in the repo). After building, explain what was built and why, file by file.
-10. Branches: day work goes on `claude/festive-clarke-6w890k`. Do not use `main` for day work. Commit locally; ask Kirito before every push and push only on a yes.
+10. Branches: day work goes on the session's branch (now `claude/busy-tesla-org5z1`). Do not use `main` for day work. Since 26 Oct Kirito does not need to approve pushes: commit and push when a piece of work is done and its checks pass, then say what was pushed.
 
 ## Stack
 Python 3.11 · FastAPI · Uvicorn · SQLAlchemy 2 · Alembic · PostgreSQL (local) · APScheduler · httpx
