@@ -121,3 +121,28 @@ def test_debug_meter_prints_once_a_second_and_flags_a_silent_microphone():
     loud = (np.ones(CHUNK_SAMPLES) * 3000).astype(np.int16)
     line = [meter.feed(loud, 0.7, 0.5) for _ in range(12)][-1]
     assert "too quiet" not in line and "wake score 0.70" in line
+
+
+def test_score_samples_reports_the_best_score_and_when():
+    from voice.wake import score_samples
+
+    class Fake:
+        def __init__(self):
+            self.n = 0
+
+        def predict(self, chunk):
+            assert len(chunk) == CHUNK_SAMPLES
+            self.n += 1
+            return {"hey": 0.8 if self.n == 26 else 0.1}
+
+    best, at = score_samples(Fake(), np.zeros(CHUNK_SAMPLES * 40, dtype=np.int16))
+    assert best == 0.8 and at == 2.0  # chunk 26 starts at 25 x 80 ms
+
+
+def test_audio_report_spots_quiet_and_clipped_recordings():
+    from voice.wake import audio_report
+
+    assert "too quiet" in audio_report(np.full(16000, 100, dtype=np.int16))
+    assert "CLIPPED" in audio_report(np.full(16000, 32767, dtype=np.int16))
+    wave_ = (np.sin(np.linspace(0, 400, 16000)) * 9000).astype(np.int16)
+    assert audio_report(wave_).endswith("good")

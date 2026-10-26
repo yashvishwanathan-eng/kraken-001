@@ -99,25 +99,72 @@ def resolve_model(model: str) -> str:
     return str(path)
 
 
+def score_samples(model, samples) -> tuple[float, float]:
+    """Run a wake-word model over 16 kHz samples, 80 ms at a time. Returns (best score, second it happened)."""
+    import numpy as np
+
+    data = np.asarray(samples, dtype=np.int16)
+    best, at = 0.0, 0.0
+    for i in range(0, len(data) - CHUNK_SAMPLES + 1, CHUNK_SAMPLES):
+        score = best_score(model.predict(data[i:i + CHUNK_SAMPLES]))
+        if score > best:
+            best, at = score, i / SAMPLE_RATE
+    return best, at
+
+
+def audio_report(samples) -> str:
+    """Loudness, peak and clipping of a recording, in words."""
+    import numpy as np
+
+    data = np.asarray(samples, dtype=np.float64)
+    if not len(data):
+        return "empty recording"
+    rms, peak = float(np.sqrt(np.mean(data ** 2))), float(np.max(np.abs(data)))
+    clipped = float(np.mean(np.abs(data) >= 32000) * 100)
+    verdict = ("too quiet" if peak < 2000 else "CLIPPED (distorted): lower the microphone level" if clipped > 0.1
+               else "good")
+    return f"loudness {rms:.0f}, peak {peak:.0f} of 32767, clipped {clipped:.2f}% -> {verdict}"
+
+
+def load_model(model_name: str):
+    from openwakeword.model import Model
+
+    return Model(wakeword_models=[resolve_model(model_name)], inference_framework="onnx")
+
+
+def write_wav(path: Path, samples) -> None:
+    import numpy as np
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(SAMPLE_RATE)
+        w.writeframes(np.asarray(samples, dtype=np.int16).tobytes())
+
+
 class DebugMeter:
     """For --debug: one line per second with the microphone level and the best wake-word score."""
 
     def __init__(self, every: int = 12) -> None:  # 12 chunks of 80 ms = about 1 s
-        self.every, self.n, self.loudest, self.best = every, 0, 0.0, 0.0
+        self.every, self.n, self.loudest, self.best, self.clipped = every, 0, 0.0, 0.0, 0
 
     def feed(self, chunk, score: float, threshold: float) -> str | None:
         import numpy as np
 
         self.n += 1
-        self.loudest = max(self.loudest, float(np.sqrt(np.mean(np.asarray(chunk, dtype=np.float64) ** 2))))
+        samples = np.asarray(chunk, dtype=np.float64)
+        self.loudest = max(self.loudest, float(np.sqrt(np.mean(samples ** 2))))
+        self.clipped += int(np.sum(np.abs(samples) >= 32000))
         self.best = max(self.best, score)
         if self.n < self.every:
             return None
         level = min(30, int(self.loudest / 300))
-        hint = "  <- too quiet: wrong microphone?" if self.loudest < 150 else ""
+        hint = ("  <- too quiet: wrong microphone?" if self.loudest < 150
+                else "  <- CLIPPING: too loud, lower the microphone level" if self.clipped > 20 else "")
         line = (f"mic {'#' * level:<30} {self.loudest:6.0f}   wake score {self.best:.2f} "
                 f"(needs {threshold:.2f}){hint}")
-        self.n, self.loudest, self.best = 0, 0.0, 0.0
+        self.n, self.loudest, self.best, self.clipped = 0, 0.0, 0.0, 0
         return line
 
 
@@ -142,9 +189,7 @@ class WakeListener:
 
         import numpy as np
         import sounddevice as sd
-        from openwakeword.model import Model
-
-        model = Model(wakeword_models=[resolve_model(self.model_name)], inference_framework="onnx")
+        model = load_model(self.model_name)
         chunks: "queue.Queue[np.ndarray]" = queue.Queue()
 
         def microphone(indata, frames, time_info, status) -> None:  # called by the audio driver, ~every 80 ms
@@ -194,6 +239,16 @@ class WakeListener:
         import sounddevice as sd
 
         sd.play(np.array(self.ack_samples, dtype=np.int16), SAMPLE_RATE, blocking=False)
+
+
+    def record(self, seconds: float):
+        """Record the microphone exactly as the listener hears it (16 kHz mono)."""
+        import sounddevice as sd
+
+        audio = sd.rec(int(seconds * SAMPLE_RATE), samplerate=SAMPLE_RATE, channels=1, dtype="int16",
+                       device=self.device)
+        sd.wait()
+        return audio[:, 0]
 
 
 def list_devices() -> str:

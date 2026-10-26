@@ -5,6 +5,8 @@
   python -m voice.run_listener --device 2 --threshold 0.6
   python -m voice.run_listener --ack-only         only play "Yes, boss" (the old Step 1 test)
   python -m voice.run_listener --debug            print mic level and wake score every second (nothing heard?)
+  python -m voice.run_listener --test-file x.wav  score a recording (e.g. a clean "Hey Jarvis" from Rumik)
+  python -m voice.run_listener --mic-test 4       record 4 s from the mic, save it, score it, say if it clips
 
 On "Hey Friday" it answers "Yes, boss", opens Friday's page in the browser when the software is not open,
 records your order until you stop talking, and Friday answers (on the open dashboard, or on this speaker).
@@ -16,11 +18,22 @@ import io
 import logging
 import wave
 import webbrowser
+from pathlib import Path
 
-from app.config import get_settings
+from app.config import BACKEND_DIR, get_settings
+
 from voice.api_client import ApiClient
 from voice.session import Session, record_until_silence
-from voice.wake import SAMPLE_RATE, WakeListener, list_devices
+from voice.wake import (
+    SAMPLE_RATE,
+    WakeListener,
+    audio_report,
+    list_devices,
+    load_model,
+    read_wav_samples,
+    score_samples,
+    write_wav,
+)
 
 log = logging.getLogger("safetyai.voice")
 
@@ -37,6 +50,23 @@ def play_wav(data: bytes) -> None:
         sd.play(frames, w.getframerate(), blocking=True)
 
 
+def test(listener: WakeListener, model_name: str, path: str | None, seconds: float | None) -> None:
+    """Score one recording: a file, or a few seconds from the microphone (saved so you can listen to it)."""
+    if path:
+        file = Path(path)
+        samples = read_wav_samples(file if file.is_absolute() else BACKEND_DIR / file)
+    else:
+        print(f'Recording {seconds:g} s: say "Hey Jarvis" now...', flush=True)
+        samples = listener.record(seconds)
+        out = BACKEND_DIR / "media" / "debug" / "mic_test.wav"
+        write_wav(out, samples)
+        print(f"saved {out} (open it to hear what the listener hears)")
+    print(audio_report(samples))
+    best, at = score_samples(load_model(model_name), samples)
+    verdict = "WOULD WAKE" if best >= listener.trigger.threshold else "would not wake"
+    print(f"best wake score {best:.2f} at {at:.1f} s (needs {listener.trigger.threshold:.2f}) -> {verdict}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Friday's wake-word listener.")
     parser.add_argument("--list-devices", action="store_true", help="list microphones and exit")
@@ -44,6 +74,9 @@ def main() -> None:
     parser.add_argument("--threshold", type=float, help="0 to 1; higher is stricter (default from .env)")
     parser.add_argument("--ack-only", action="store_true", help='only answer "Yes, boss" (no recording)')
     parser.add_argument("--debug", action="store_true", help="print microphone level and wake score every second")
+    parser.add_argument("--test-file", help="score a WAV file with the wake-word model and exit")
+    parser.add_argument("--mic-test", type=float, metavar="SECONDS",
+                        help="record the mic for SECONDS, save media/debug/mic_test.wav, score it and exit")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -52,6 +85,9 @@ def main() -> None:
         return
     listener = WakeListener(threshold=args.threshold, device=args.device)
     s = get_settings()
+    if args.test_file or args.mic_test:
+        test(listener, s.wake_model, args.test_file, args.mic_test)
+        return
     if args.ack_only:
         listener.run(debug=args.debug)
         return
