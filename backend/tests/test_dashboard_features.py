@@ -390,3 +390,22 @@ def test_tts_sends_the_voice_description_for_a_female_voice(monkeypatch):
     monkeypatch.setattr(tts.httpx, "post", lambda url, json, headers, timeout: seen.append(json) or FakeResponse(200, b"RIFF"))
     tts.speak("Yes, boss.")
     assert seen[0] == {"text": "Yes, boss.", "model": "mulberry", "description": "calm, clear Indian woman"}
+
+
+def test_edit_a_camera_and_reseed_keeps_the_edit(roster, fake_workers):
+    """A phone's IP changes: the admin edits the address and name; python -m app.seed later keeps them."""
+    from app.models import Camera
+    from app.seed import seed_cameras
+
+    grant(roster, "Anita Rao", "manage_cameras")
+    headers = login(client, ADMIN)
+    camera = roster.query(Camera).order_by(Camera.id).first()
+    out = client.put(f"/cameras/{camera.id}", json={"name": "Main gate", "source": "http://192.168.137.74:8080/video"},
+                     headers=headers)
+    assert out.status_code == 200 and out.json()["name"] == "Main gate"
+    assert client.put(f"/cameras/{camera.id}", json={"name": ""}, headers=headers).status_code == 422
+    seed_cameras(roster)
+    roster.commit()
+    roster.expire_all()
+    again = roster.get(Camera, camera.id)
+    assert (again.name, again.source) == ("Main gate", "http://192.168.137.74:8080/video")

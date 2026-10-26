@@ -10,6 +10,8 @@ GET  /cameras/{id}/worker-log     the last lines the worker printed
 Cameras are never deleted from here (that would delete their incidents); disable them instead.
 """
 
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
@@ -144,6 +146,8 @@ def update_camera(camera_id: str, body: CameraUpdate,
         changes = body.model_dump(exclude_none=True)
         for field, value in changes.items():
             setattr(camera, field, value)
+        if {"name", "source"} & changes.keys():
+            camera.edited_at = datetime.now(timezone.utc)  # re-seeding keeps this name and address
         record(db, admin, "camera_update", target=f"camera:{camera_id}", detail=changes)
         db.commit()
         running = workers.status(camera_id)["running"]

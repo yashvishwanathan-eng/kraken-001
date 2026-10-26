@@ -34,7 +34,9 @@ def seed_cameras(db: Session) -> int:
     taken = {n for n in db.scalars(select(Camera.number).where(Camera.number.is_not(None)))}
     for cam in cameras:
         row = db.get(Camera, cam.id) or Camera(id=cam.id)
-        row.name, row.source, row.port = cam.name, cam.source, cam.port
+        if row.edited_at is None:  # a name or address changed on the dashboard is kept
+            row.name, row.source = cam.name, cam.source
+        row.port = cam.port
         if cam.number is not None and cam.number != row.number:
             other = db.scalar(select(Camera).where(Camera.number == cam.number, Camera.id != cam.id))
             if other is not None:

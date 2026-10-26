@@ -21,6 +21,8 @@ class Camera(Base):
     number: Mapped[int | None] = mapped_column(Integer, unique=True, nullable=True)  # "camera 6" by voice
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")  # False: worker not started
     added_by: Mapped[str | None] = mapped_column(String(120), nullable=True)  # None: from cameras.yaml
+    # name or address changed on the dashboard: python -m app.seed then keeps them instead of cameras.yaml's
+    edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     zones: Mapped[list["Zone"]] = relationship(back_populates="camera", cascade="all, delete-orphan")
 

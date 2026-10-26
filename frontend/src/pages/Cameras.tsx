@@ -2,10 +2,12 @@
  * pages/Cameras.tsx
  * Every camera with its number, address and worker. Add a camera: test the address (one picture is read),
  * add it (numbered automatically, given to roles) and its worker starts. Start, stop, restart, disable, log.
+ * Edit: change the name, number or address (a phone's IP changes after a Wi-Fi reconnect); a new address
+ * is tested first and the running worker restarts on it.
  */
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Camera as CameraIcon, CheckCircle2, Play, Plus, RotateCcw, ScrollText, Square, XCircle } from 'lucide-react'
+import { Camera as CameraIcon, CheckCircle2, Pencil, Play, Plus, RotateCcw, ScrollText, Square, XCircle } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { Button, Checks, Dot, ErrorLine, Field, Modal, Tile, timeAgo, useMe } from '@/components/admin/kit'
 import {
@@ -50,15 +52,7 @@ function AddCameraModal({ onClose }: { onClose: () => void }) {
           <Button onClick={() => runTest.mutate()} disabled={runTest.isPending || !source}>
             {runTest.isPending ? 'Testing…' : 'Test camera'}
           </Button>
-          {test && (test.ok ? (
-            <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--resolved)' }}>
-              <CheckCircle2 className="h-3.5 w-3.5" /> Picture received: {test.width}×{test.height} in {test.ms} ms
-            </span>
-          ) : (
-            <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--critical)' }}>
-              <XCircle className="h-3.5 w-3.5" /> {test.error}
-            </span>
-          ))}
+          {test && <TestResult test={test} />}
           <ErrorLine error={runTest.error} />
         </div>
         <div className="sm:col-span-2">
@@ -69,6 +63,79 @@ function AddCameraModal({ onClose }: { onClose: () => void }) {
         <ErrorLine error={add.error} />
         <Button variant="primary" className="ml-auto" disabled={!name || !test?.ok || add.isPending} onClick={() => add.mutate()}>
           <Plus className="h-3.5 w-3.5" /> Add and start
+        </Button>
+      </div>
+    </Modal>
+  )
+}
+
+function TestResult({ test }: { test: CameraTest }) {
+  return test.ok ? (
+    <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--resolved)' }}>
+      <CheckCircle2 className="h-3.5 w-3.5" /> Picture received: {test.width}×{test.height} in {test.ms} ms
+    </span>
+  ) : (
+    <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--critical)' }}>
+      <XCircle className="h-3.5 w-3.5" /> {test.error}
+    </span>
+  )
+}
+
+function EditCameraModal({ camera, onClose }: { camera: CameraAdmin; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [name, setName] = useState(camera.name)
+  const [source, setSource] = useState(camera.source)
+  const [number, setNumber] = useState(camera.number ? String(camera.number) : '')
+  const [test, setTest] = useState<CameraTest | null>(null)
+  const sourceChanged = source.trim() !== camera.source
+  const runTest = useMutation({ mutationFn: () => testCamera(source.trim()), onSuccess: setTest })
+  const save = useMutation({
+    mutationFn: () => updateCamera(camera.id, {
+      ...(name.trim() !== camera.name ? { name: name.trim() } : {}),
+      ...(sourceChanged ? { source: source.trim() } : {}),
+      ...(number && Number(number) !== camera.number ? { number: Number(number) } : {}),
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cameras-admin'] })
+      qc.invalidateQueries({ queryKey: ['cameras'] })
+      qc.invalidateQueries({ queryKey: ['restricted'] })
+      onClose()
+    },
+  })
+  return (
+    <Modal title={`Edit ${camera.name}`} onClose={onClose} wide>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Name" value={name} onChange={e => setName(e.target.value)} />
+        <Field label="Number" type="number" min={1} value={number} onChange={e => setNumber(e.target.value)} hint={'"Show camera 6" by voice'} />
+        <div className="sm:col-span-2">
+          <Field
+            label="Address"
+            value={source}
+            onChange={e => {
+              setSource(e.target.value)
+              setTest(null)
+            }}
+            hint="Phone (IP Webcam): http://NEW-IP:8080/video (the IP is shown at the bottom of the IP Webcam screen)"
+          />
+        </div>
+        <div className="flex items-center gap-2 sm:col-span-2">
+          <Button onClick={() => runTest.mutate()} disabled={runTest.isPending || !source.trim()}>
+            {runTest.isPending ? 'Testing…' : 'Test camera'}
+          </Button>
+          {test && <TestResult test={test} />}
+          <ErrorLine error={runTest.error} />
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-2">
+        <ErrorLine error={save.error} />
+        {sourceChanged && !test?.ok && <span className="text-[11px] text-muted-foreground">Test the new address before saving.</span>}
+        <Button
+          variant="primary"
+          className="ml-auto"
+          disabled={!name.trim() || (sourceChanged && !test?.ok) || save.isPending}
+          onClick={() => save.mutate()}
+        >
+          {save.isPending ? 'Saving…' : 'Save'}
         </Button>
       </div>
     </Modal>
@@ -93,6 +160,7 @@ export function CamerasPage() {
   const { data, error } = useQuery({ queryKey: ['cameras-admin'], queryFn: fetchCamerasAdmin, refetchInterval: 5000, enabled: can('manage_cameras') })
   const [adding, setAdding] = useState(false)
   const [log, setLog] = useState<CameraAdmin | null>(null)
+  const [editing, setEditing] = useState<CameraAdmin | null>(null)
   const act = useMutation({
     mutationFn: ({ id, op }: { id: string; op: 'start' | 'stop' | 'restart' | 'enable' | 'disable' }) =>
       op === 'enable' || op === 'disable' ? updateCamera(id, { enabled: op === 'enable' }) : cameraWorker(id, op),
@@ -136,6 +204,7 @@ export function CamerasPage() {
               ) : (
                 <Button disabled={!c.enabled} onClick={() => act.mutate({ id: c.id, op: 'start' })}><Play className="h-3 w-3" /> Start</Button>
               )}
+              <Button onClick={() => setEditing(c)}><Pencil className="h-3 w-3" /> Edit</Button>
               <Button onClick={() => setLog(c)}><ScrollText className="h-3 w-3" /> Log</Button>
               <Button variant={c.enabled ? 'danger' : 'ghost'} className="ml-auto" onClick={() => act.mutate({ id: c.id, op: c.enabled ? 'disable' : 'enable' })}>
                 {c.enabled ? 'Disable' : 'Enable'}
@@ -149,6 +218,7 @@ export function CamerasPage() {
       </div>
       {adding && <AddCameraModal onClose={() => setAdding(false)} />}
       {log && <LogModal camera={log} onClose={() => setLog(null)} />}
+      {editing && <EditCameraModal camera={editing} onClose={() => setEditing(null)} />}
     </div>
   )
 }
