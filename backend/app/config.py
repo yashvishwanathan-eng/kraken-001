@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     rumik_model: str = "muga"  # muga or mulberry
     rumik_speaker: str = ""  # a preset voice (mulberry); empty = Rumik's default
     rumik_timeout_s: float = 8.0
+    friday_user: str = ""  # the wake-word listener acts as this user (their name), e.g. Anita Rao
+    voice_silence_s: float = 1.0  # stop recording after this much quiet once you have started talking
+    voice_max_s: float = 12.0  # never record longer than this
+    voice_start_timeout_s: float = 5.0  # nothing said within this long after "Yes, boss": back to waiting
+    voice_silence_rms: int = 500  # loudness (16-bit RMS) below this counts as quiet
 
     # config values (not secrets; defaults match CLAUDE.md)
     cors_origins: list[str] = ["http://localhost:5173"]

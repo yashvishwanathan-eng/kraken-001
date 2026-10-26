@@ -112,7 +112,8 @@ async def _read_audio(audio: UploadFile) -> bytes:
     limit = int(get_settings().voice_max_mb * 1024 * 1024)
     data = await audio.read(limit + 1)
     if not data or len(data) > limit:
-        raise HTTPException(status_code=422, detail=f"audio must be between 1 byte and {get_settings().voice_max_mb} MB")
+        raise HTTPException(status_code=422,
+                            detail=f"audio must be between 1 byte and {get_settings().voice_max_mb} MB")
     return data
 
 

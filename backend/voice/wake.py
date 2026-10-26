@@ -88,7 +88,9 @@ class WakeListener:
             log.warning("ack sound not found at %s: the listener will trigger without playing it", self.ack_path)
 
     def run(self, on_trigger=None) -> None:
-        """Listen until Ctrl+C. Calls on_trigger() each time the wake word is heard."""
+        """Listen until Ctrl+C. Each time the wake word is heard: play "Yes, boss", then call
+        on_trigger(next_chunks), where next_chunks() yields the microphone audio that follows (the reply is
+        recorded from the same microphone). When on_trigger returns, listening for the wake word resumes."""
         import queue
 
         import numpy as np
@@ -118,7 +120,18 @@ class WakeListener:
                         log.info("wake word heard (score %.2f, %.1f ms)", score, ms)
                         self.acknowledge()
                         if on_trigger:
-                            on_trigger()
+                            ack_chunks = int(len(self.ack_samples or []) / CHUNK_SAMPLES)
+
+                            def next_chunks():
+                                for _ in range(ack_chunks):  # skip our own "Yes, boss"
+                                    chunks.get()
+                                while True:
+                                    yield chunks.get()
+
+                            on_trigger(next_chunks)
+                            while not chunks.empty():  # drop what was heard while Friday was talking
+                                chunks.get_nowait()
+                            model.reset()
             except KeyboardInterrupt:
                 log.info("stopped")
 

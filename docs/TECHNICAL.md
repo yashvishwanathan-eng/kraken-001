@@ -265,6 +265,10 @@ Files are re-read automatically when they change. No restart is needed.
 - Voice summaries: the fast path matches "summary/recap", then `summary_window()` reads "today", "yesterday", "past/last N hours/minutes" and `summary_cameras()` reads "cameras 6, 7 and 8". Unknown or hidden camera numbers are named as "not found".
 - `services/tts.py`: Rumik Silk over HTTP (`POST {RUMIK_GATEWAY_URL}/v1/tts`, Bearer key, WAV back), 8 s timeout and one retry. `python -m tools.check_rumik` checks the key without printing it.
 
+### 4.13 Friday by voice (P25)
+- Screen: `frontend/src/pages/Assistant.tsx` (the page), `components/friday/FridayBlob.tsx` (three.js blob; loudness 0..1 read every frame), `lib/friday.ts` (record -> `/assistant/voice-command` -> answer -> `/assistant/speak` audio through a Web Audio analyser; browser voice if Rumik is not set up), `components/friday/FridayBridge.tsx` (alarm glow and spoken alarm; `friday` notices).
+- Laptop: `python -m voice.run_listener`. Wake word -> "Yes, boss" -> `/internal/friday/event` (listening; opens `DASHBOARD_URL/assistant` when FRIDAY_USER has no dashboard open) -> `record_until_silence` (1 s quiet, 12 s max, 5 s to start) -> `/internal/friday/voice-command` -> the answer is spoken by FRIDAY_USER's dashboard, or by the listener from `/internal/friday/speak` when none is open. Big actions: the next recording goes back with `confirm_token`; only a clear yes confirms.
+
 ## 5. Security model
 
 | Area | How it is protected |
