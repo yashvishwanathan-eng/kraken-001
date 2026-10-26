@@ -870,6 +870,18 @@ class ConversationSummary(BaseModel):
     turns: int
     last_text: str
     recording_url: str | None  # the whole phone call's audio, once Twilio has sent it
+    outcome: Literal["answered", "declined", "no_answer", "failed", "cancelled"] | None  # phone calls (P32)
+    duration_s: int | None
+
+
+class PersonCalls(BaseModel):
+    person: str
+    calls: int
+    answered: int
+    declined: int
+    no_answer: int
+    laptop_talks: int
+    last_at: UtcDatetime
 
 
 class ConversationOut(ConversationSummary):

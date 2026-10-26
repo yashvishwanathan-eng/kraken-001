@@ -75,6 +75,37 @@ def call_turn(call_id: int, speaker: str, text: str, action: str | None = None) 
         log.exception("call=%d could not save a conversation turn", call_id)
 
 
+OUTCOMES = {"in-progress": "answered", "completed": "answered", "busy": "declined", "no-answer": "no_answer",
+            "failed": "failed", "canceled": "cancelled"}
+
+
+def call_outcome(call_id: int, twilio_status: str, duration_s: int | None) -> None:
+    """The call ended: answered, declined (rejected or busy), not answered, failed. A call nobody picked up still
+    gets its line in the history, so the log shows who declined and who never answered."""
+    outcome = OUTCOMES.get(twilio_status)
+    if outcome is None:
+        return
+    try:
+        with SessionLocal() as db:
+            conv = _for_call(db, call_id)
+            if conv is None:
+                return
+            if conv.outcome == "answered" and outcome != "answered":
+                return  # a late duplicate status never overwrites a real answer
+            conv.outcome = outcome
+            conv.duration_s = duration_s
+            if outcome != "answered" and not conv.turns:
+                text = {"declined": "Declined the call.", "no_answer": "Did not answer.",
+                        "failed": "The call could not be connected.", "cancelled": "Call cancelled."}[outcome]
+                _add(db, conv, "person", text, outcome)
+            conv.last_at = datetime.now(timezone.utc)
+            db.commit()
+            conversation_id = conv.id
+        _nudge(conversation_id)
+    except Exception:
+        log.exception("call=%d could not save the call outcome", call_id)
+
+
 def save_call_recording(call_id: int, recording_url: str) -> None:
     """Twilio finished recording the call: download it (in the background) and attach it to the conversation."""
     threading.Thread(target=_download, args=(call_id, recording_url), name=f"rec-{call_id}", daemon=True).start()

@@ -280,7 +280,21 @@ export interface ConversationSummary {
   turns: number
   last_text: string
   recording_url: string | null
+  outcome: 'answered' | 'declined' | 'no_answer' | 'failed' | 'cancelled' | null
+  duration_s: number | null
 }
+
+export interface PersonCalls {
+  person: string
+  calls: number
+  answered: number
+  declined: number
+  no_answer: number
+  laptop_talks: number
+  last_at: string
+}
+
+export const getConversationPeople = () => http.get<PersonCalls[]>('/conversations/people')
 
 export interface ConversationLine {
   at: string
@@ -290,8 +304,13 @@ export interface ConversationLine {
   audio_url: string | null
 }
 
-export const getConversations = (channel?: 'phone' | 'laptop') =>
-  http.get<ConversationSummary[]>(`/conversations${channel ? `?channel=${channel}` : ''}`)
+export const getConversations = (channel?: 'phone' | 'laptop', person?: string) => {
+  const q = new URLSearchParams()
+  if (channel) q.set('channel', channel)
+  if (person) q.set('person', person)
+  const qs = q.toString()
+  return http.get<ConversationSummary[]>(`/conversations${qs ? `?${qs}` : ''}`)
+}
 
 export const getConversation = (id: number) =>
   http.get<ConversationSummary & { lines: ConversationLine[] }>(`/conversations/${id}`)

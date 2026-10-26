@@ -216,3 +216,29 @@ def test_the_call_recording_is_kept_with_the_conversation(roster, talk, monkeypa
     conv = roster.query(Conversation).filter_by(call_id=call_id).one()
     assert conv.recording_path == f"calls/call_{call_id}.mp3"
     assert (tmp_path / "calls" / f"call_{call_id}.mp3").read_bytes() == b"ID3-mp3"
+
+
+def test_the_log_shows_who_answered_declined_or_missed_by_name(roster, talk):
+    from tests.conftest import login
+
+    answered = a_call(roster, incident_id=make_incident(roster, type_="fire", severity="critical"))
+    twilio_post(client, f"/twilio/voice?call_id={answered}", {})
+    say_(answered, "I'm in the canteen")
+    twilio_post(client, f"/twilio/status?call_id={answered}", {"CallStatus": "completed", "CallDuration": "42"})
+    declined = a_call(roster, incident_id=make_incident(roster), name="Vikram Shah")
+    twilio_post(client, f"/twilio/status?call_id={declined}", {"CallStatus": "busy"})
+    missed = a_call(roster, incident_id=make_incident(roster), name="Suresh Babu")
+    twilio_post(client, f"/twilio/status?call_id={missed}", {"CallStatus": "no-answer"})
+    twilio_post(client, f"/twilio/status?call_id={missed}", {"CallStatus": "no-answer"})  # Twilio repeats: once only
+
+    headers = login(client, "1111")
+    people = {p["person"]: p for p in client.get("/conversations/people", headers=headers).json()}
+    counts = (people["Ravi Kumar"]["answered"], people["Vikram Shah"]["declined"], people["Suresh Babu"]["no_answer"])
+    assert counts == (1, 1, 1)
+    vikram = client.get("/conversations?person=Vikram Shah", headers=headers).json()
+    assert len(vikram) == 1 and vikram[0]["outcome"] == "declined" and vikram[0]["last_text"] == "Declined the call."
+    ravi = client.get("/conversations?person=Ravi Kumar", headers=headers).json()[0]
+    assert ravi["outcome"] == "answered" and ravi["duration_s"] == 42
+    lines_ = client.get(f"/conversations/{ravi['id']}", headers=headers).json()["lines"]
+    assert [(line["speaker"], line["text"]) for line in lines_][1] == ("person", "I'm in the canteen")
+    assert lines(roster, missed) == [("person", "Did not answer.")]

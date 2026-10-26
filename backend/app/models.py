@@ -314,6 +314,9 @@ class Conversation(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     last_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     recording_path: Mapped[str | None] = mapped_column(String(255), nullable=True)  # whole call audio (phone)
+    # phone only: answered, declined, no_answer, failed, cancelled (from Twilio's call status); seconds talked
+    outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    duration_s: Mapped[int | None] = mapped_column(Integer, nullable=True)
     turns: Mapped[list["ConversationTurn"]] = relationship(
         back_populates="conversation", order_by="ConversationTurn.id", cascade="all, delete-orphan")
 

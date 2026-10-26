@@ -588,6 +588,9 @@ async def status_webhook(request: Request, call_id: int) -> Response:
     form = await verified_form(request)
     try:
         await run_in_threadpool(_status, call_id, form.get("CallStatus", ""), form.get("CallSid", ""))
+        duration = form.get("CallDuration", "")
+        await run_in_threadpool(conversations.call_outcome, call_id, form.get("CallStatus", ""),
+                                int(duration) if duration.isdigit() else None)
     except Exception:
         log.exception("call=%d status webhook failed", call_id)
     return twiml()
