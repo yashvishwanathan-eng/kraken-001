@@ -5,7 +5,7 @@
   python -m voice.run_listener --device 2 --threshold 0.6
   python -m voice.run_listener --ack-only         only play "Yes, boss" (the old Step 1 test)
   python -m voice.run_listener --debug            print mic level and wake score every second (nothing heard?)
-  python -m voice.run_listener --test-file x.wav  score a recording (e.g. a clean "Hey Jarvis" from Rumik)
+  python -m voice.run_listener --test-file x.wav  score a recording (e.g. a clean "Hey Friday" from Rumik)
   python -m voice.run_listener --mic-test 4       record 4 s from the mic, save it, score it, say if it clips
 
 On "Hey Friday" it answers "Yes, boss", opens Friday's page in the browser when the software is not open,
@@ -56,7 +56,7 @@ def test(listener: WakeListener, model_name: str, path: str | None, seconds: flo
         file = Path(path)
         samples = read_wav_samples(file if file.is_absolute() else BACKEND_DIR / file)
     else:
-        print(f'Recording {seconds:g} s: say "Hey Jarvis" now...', flush=True)
+        print(f'Recording {seconds:g} s: say "Hey Friday" now...', flush=True)
         samples = listener.record(seconds)
         out = BACKEND_DIR / "media" / "debug" / "mic_test.wav"
         write_wav(out, samples)

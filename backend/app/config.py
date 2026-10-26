@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""  # secret: .env only
     smtp_from: str = ""  # e.g. "RingGuard <alerts@example.com>"
-    wake_model: str = "hey_jarvis_v0.1"  # openWakeWord model name; replace with the custom model once trained
+    wake_model: str = "models/hey_friday.onnx"  # trained on Colab (tools/wake_training/README.md); relative to backend/
     wake_threshold: float = 0.5  # 0 to 1; higher is stricter (fewer false alarms, may miss some)
     wake_cooldown_s: float = 2.0  # after a trigger, ignore the mic this long
     wake_device: str = ""  # microphone number or name; empty = the default microphone

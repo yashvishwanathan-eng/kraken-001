@@ -73,29 +73,37 @@ def read_wav_samples(path: Path) -> "list[int]":
     return np.clip(np.round(samples), -32768, 32767).astype(np.int16).tolist()
 
 
-def ensure_model(model_name: str) -> None:
-    """Download the pretrained model once if it is not on this machine yet (needs internet the first time)."""
+TRAINING_GUIDE = "tools/wake_training/README.md"
+
+
+def ensure_feature_models() -> None:
+    """openWakeWord turns sound into features with two small shared models (melspectrogram, embedding) before our
+    "Hey Friday" model scores them. Download those two once (needs internet the first time); no wake words."""
     import openwakeword
     from openwakeword import utils
 
     folder = Path(openwakeword.__file__).parent / "resources" / "models"
-    if not (folder / f"{model_name}.onnx").exists():
-        log.info("downloading wake-word model %s (first run only)", model_name)
-        utils.download_models(model_names=[model_name])
+    for feature in openwakeword.FEATURE_MODELS.values():
+        url = feature["download_url"].replace(".tflite", ".onnx")
+        if not (folder / url.split("/")[-1]).exists():
+            log.info("downloading openWakeWord feature model %s (first run only)", url.split("/")[-1])
+            folder.mkdir(parents=True, exist_ok=True)
+            utils.download_file(url, str(folder))
 
 
 def resolve_model(model: str) -> str:
-    """WAKE_MODEL is either a ready-made openWakeWord name (hey_jarvis_v0.1: downloaded once) or the path of a
-    model you trained (models/hey_friday.onnx, relative to backend/). Returns what openWakeWord should load."""
+    """WAKE_MODEL is the "Hey Friday" model file trained on Colab (models/hey_friday.onnx, relative to backend/).
+    Returns the full path openWakeWord should load."""
     if not model.endswith((".onnx", ".tflite")):
-        ensure_model(model)
-        return model
+        raise ValueError(f"WAKE_MODEL must be the trained model file (models/hey_friday.onnx), not {model!r}. "
+                         f"How to train it: {TRAINING_GUIDE}")
     path = Path(model)
     if not path.is_absolute():
         path = BACKEND_DIR / path
     if not path.exists():
-        raise FileNotFoundError(f"wake-word model not found: {path}. Put the hey_friday.onnx from Colab there, "
-                                "or set WAKE_MODEL=hey_jarvis_v0.1 until it is trained")
+        raise FileNotFoundError(f"wake-word model not found: {path}. Train it on Colab ({TRAINING_GUIDE}) and "
+                                "put hey_friday.onnx there. Until then, hold Space on Friday's page to talk.")
+    ensure_feature_models()
     return str(path)
 
 

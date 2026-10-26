@@ -310,7 +310,7 @@ def test_the_three_summary_questions_answer_accurately(roster):
         return out
 
     today = roster.scalar(select(Incident.id).where(Incident.started_at >= commands.summaries.today_window()[0]))
-    hour = say("Hey Jarvis, what's the summary for the past hour?")
+    hour = say("Hey Friday, what's the summary for the past hour?")
     assert "the past hour" in hour["answer"] and "2 incidents in total" in hour["answer"]
     assert sorted(hour["data"]["camera_ids"]) == ["cam-phone", "cam-webcam"]
 

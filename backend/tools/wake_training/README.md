@@ -1,7 +1,8 @@
 # Training the "Hey Friday" wake word
 
-Until this is done, the listener uses the ready-made "Hey Jarvis" model. This guide trains your own
-"Hey Friday" model on Google Colab (free, with a GPU), then uses it on the laptop.
+Friday's listener only uses our own "Hey Friday" model (the "Hey Jarvis" stand-in was removed). Until this
+model exists, the listener stops at start and says so; holding Space on Friday's page still works. This guide
+trains the model on Google Colab (free, with a GPU), then uses it on the laptop.
 
 **Time:** about 1 to 1.5 hours, mostly waiting. **You need:** a Google account and a Chrome or Edge browser.
 **No recordings of your voice are needed.** The notebook makes thousands of "hey friday" clips with
@@ -32,6 +33,8 @@ config["n_samples_val"] = 1000      # clips kept aside to check the model
 config["steps"] = 15000             # training steps (the example uses 10000)
 config["target_accuracy"] = 0.6
 config["target_recall"] = 0.25
+# similar-sounding phrases the model must NOT wake on (said in normal talk)
+config["custom_negative_phrases"] = ["friday", "hey freddy", "hey ready", "happy friday", "hey friend"]
 
 config["background_paths"] = ['./audioset_16k', './fma']
 config["false_positive_validation_data_path"] = "validation_set_features.npy"
@@ -88,8 +91,15 @@ works, but it triggers less reliably.
    python -m voice.run_listener
    ```
 
-If the file is not where `WAKE_MODEL` points, the listener stops at once and says where it looked. To go
-back to the stand-in, set `WAKE_MODEL=hey_jarvis_v0.1`.
+Quick check without your own voice: make a clean "Hey Friday" in Friday's Rumik voice and score it:
+```powershell
+python -m tools.check_rumik --text "Hey Friday" --out media/debug/hey_friday.wav
+python -m voice.run_listener --test-file media/debug/hey_friday.wav
+python -m voice.run_listener --mic-test 4
+```
+The first should say `WOULD WAKE`; the second records 4 s of you saying it (saved to `media/debug/mic_test.wav`).
+
+If the file is not where `WAKE_MODEL` points, the listener stops at once and says where it looked.
 
 ---
 
@@ -97,5 +107,5 @@ back to the stand-in, set `WAKE_MODEL=hey_jarvis_v0.1`.
 
 Trained on Google Colab with openWakeWord's automatic training notebook (code Apache-2.0). The training
 data is synthetic speech from piper-sample-generator (LibriTTS-R voice) plus background audio and
-features from AudioSet, the Free Music Archive and ACAV100M; their own licences apply. The ready-made
-"Hey Jarvis" model is CC BY-NC-SA 4.0 (non-commercial use only).
+features from AudioSet, the Free Music Archive and ACAV100M; their own licences apply. No ready-made
+wake-word model is used.

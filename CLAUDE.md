@@ -154,7 +154,7 @@ Decisions from the 18 Oct product review, all confirmed. Escalation details are 
 2. **Severity routing.** See "Escalation and calls". There is no CEO role; the top call level is Admin.
 3. **Phone commands.** Head Guard and Admin can speak or press keys during an alert call. "Alert everybody" sends an instant WhatsApp to all on-shift guards, shows a red banner on every dashboard, and starts parallel calls. Twilio places about 1 new call per second by default, so a full roll-out takes time. Say so on stage.
 4. **Roll call.** Every alerted guard presses 1 = responding or 2 = safe/evacuated. The dashboard shows a live board, e.g. "14 of 20 responded, 6 not reached".
-5. **Laptop assistant.** Named **Friday** (26 Oct; was "Jarvis", which must not appear in user-facing text). Female Rumik Silk voice. The product name stays `PRODUCT_NAME`. Wake word "Hey Friday" (custom openWakeWord model to train; "Hey Jarvis" is the stand-in).
+5. **Laptop assistant.** Named **Friday** (26 Oct; was "Jarvis", which must not appear in user-facing text). Female Rumik Silk voice. The product name stays `PRODUCT_NAME`. Wake word "Hey Friday" (our own openWakeWord model trained on Colab, `models/hey_friday.onnx`; the "Hey Jarvis" stand-in was removed 26 Oct).
    - Input: push-to-talk on the spacebar always works. Optional offline wake word.
    - Fast path: keyword/pattern match for about 12 known commands. No LLM.
    - Smart path: Groq function calling.

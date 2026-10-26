@@ -33,7 +33,7 @@ def test_scores_below_threshold_never_trigger():
 
 
 def test_best_score_takes_the_highest_model_score():
-    assert best_score({"hey_jarvis": 0.2, "alexa": 0.7}) == 0.7
+    assert best_score({"hey_friday": 0.2, "other": 0.7}) == 0.7
     assert best_score({}) == 0.0
 
 
@@ -61,18 +61,12 @@ def test_missing_ack_sound_still_builds_the_listener(tmp_path):
     assert listener.ack_samples is None  # it warns and triggers without a sound
 
 
-def test_the_real_model_stays_quiet_on_silence():
-    from openwakeword.model import Model
+def test_the_trained_model_stays_quiet_on_silence():
+    from voice.wake import BACKEND_DIR, load_model
 
-    from voice.wake import ensure_model
-
-    model_name = "hey_jarvis_v0.1"
-    import openwakeword
-    folder = Path(openwakeword.__file__).parent / "resources" / "models"
-    if not (folder / f"{model_name}.onnx").exists():
-        pytest.skip("pretrained model not downloaded yet (run once with internet)")
-    ensure_model(model_name)
-    model = Model(wakeword_models=[model_name], inference_framework="onnx")
+    if not (BACKEND_DIR / "models" / "hey_friday.onnx").exists():
+        pytest.skip("models/hey_friday.onnx not trained yet (tools/wake_training/README.md)")
+    model = load_model("models/hey_friday.onnx")
     silence = np.zeros(CHUNK_SAMPLES * 10, dtype=np.int16)
     scores = [best_score(model.predict(silence[i:i + CHUNK_SAMPLES])) for i in range(0, len(silence), CHUNK_SAMPLES)]
     assert max(scores) < 0.05
@@ -91,8 +85,15 @@ def test_a_trained_model_file_is_used_as_is_and_never_downloaded(tmp_path, monke
 
     model = tmp_path / "hey_friday.onnx"
     model.write_bytes(b"onnx")
-    monkeypatch.setattr(wake, "ensure_model", lambda name: pytest.fail("must not download"))
+    monkeypatch.setattr(wake, "ensure_feature_models", lambda: None)
     assert wake.resolve_model(str(model)) == str(model)
+
+
+def test_a_ready_made_model_name_is_refused():
+    from voice import wake
+
+    with pytest.raises(ValueError, match="hey_friday.onnx"):
+        wake.resolve_model("hey_jarvis_v0.1")
 
 
 def test_a_missing_trained_model_says_where_it_looked(tmp_path):
@@ -108,6 +109,7 @@ def test_a_relative_model_path_is_inside_backend(monkeypatch, tmp_path):
     (tmp_path / "models").mkdir()
     (tmp_path / "models" / "hey_friday.onnx").write_bytes(b"onnx")
     monkeypatch.setattr(wake, "BACKEND_DIR", tmp_path)
+    monkeypatch.setattr(wake, "ensure_feature_models", lambda: None)
     assert wake.resolve_model("models/hey_friday.onnx") == str(tmp_path / "models" / "hey_friday.onnx")
 
 

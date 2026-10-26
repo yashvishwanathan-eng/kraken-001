@@ -2,7 +2,7 @@
 
     python -m tools.check_rumik
     python -m tools.check_rumik --save      also writes media/ack/yes_boss_rumik.wav ("Yes, boss.")
-    python -m tools.check_rumik --text "Hey Jarvis" --out media/debug/hey_jarvis.wav   any sentence to a file
+    python -m tools.check_rumik --text "Hey Friday" --out media/debug/hey_friday.wav   any sentence to a file
 
 Prints OK with the time it took, or the reason it failed. The key itself is never printed.
 """

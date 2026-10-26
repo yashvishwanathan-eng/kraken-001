@@ -39,7 +39,7 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 
 ## Wake word and voice (in use, Step 1)
 - openWakeWord 0.6.0 (Apache-2.0): listens to the microphone and detects the wake word, offline on the laptop.
-- Pretrained model `hey_jarvis_v0.1` (from the openWakeWord project): used for testing only, until the custom wake word is trained. Its own licence terms must be checked before the event, because they are separate from the library's.
+- openWakeWord's two shared feature models (melspectrogram, embedding; Apache-2.0, downloaded once from the openWakeWord releases) turn sound into features for our own "Hey Friday" model. No ready-made wake-word model is used (the earlier "Hey Jarvis" stand-in was removed on 26 Oct).
 - onnxruntime 1.31.0 (MIT): runs the wake-word model.
 - sounddevice 0.5.6 (MIT): reads the microphone and plays the acknowledgement sound. Needs PortAudio, which the package installs on Windows.
 - numpy 2.4.6 (BSD-3-Clause): audio arrays.
@@ -73,6 +73,6 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - Friday's blob is adapted from an "anomalous matter" Three.js hero component pasted by Kirito (source and licence to confirm); its noise is the 3D simplex noise by Ashima Arts / Stefan Gustavson (MIT).
 
 ## Wake word "Hey Friday" (guide ready, 26 Oct; training runs on Kirito's Colab)
-- openWakeWord (Apache-2.0 code): wake-word detection on the laptop. The ready-made "Hey Jarvis" stand-in model is CC BY-NC-SA 4.0 (non-commercial).
+- openWakeWord (Apache-2.0 code): wake-word detection on the laptop, with our own trained `hey_friday.onnx` only.
 - Google Colab (free T4 GPU) runs openWakeWord's `automatic_model_training.ipynb` to train `hey_friday.onnx` (guide: `backend/tools/wake_training/README.md`). Training data: synthetic "hey friday" clips from piper-sample-generator (LibriTTS-R voice model) mixed with AudioSet, Free Music Archive and ACAV100M background audio/features; their own licences apply. No recordings of real people are used.
 - Browser text to speech (Web Speech API, voices installed on the laptop): Friday's fallback voice when Rumik is not set up or does not answer; a female voice (e.g. Microsoft Heera or Zira) is picked by name.
