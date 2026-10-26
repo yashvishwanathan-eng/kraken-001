@@ -10,7 +10,7 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - Llama 3.2 3B (`llama3.2:3b`, Meta, Llama 3.2 Community License), run locally by Ollama: offline fallback for the assistant.
 - Whisper "small" (OpenAI, MIT) in the faster-whisper format (`Systran/faster-whisper-small`, MIT), downloaded on first offline use: offline speech to text.
 - Groq-hosted models (chosen in `.env`: `GROQ_MODEL` for questions/commands, `GROQ_STT_MODEL` for speech): fill in the exact model names and their licences once chosen.
-- PPE and fire/smoke models: not chosen yet. Add the model and its training dataset, each with its licence, when chosen.
+- PPE and fire/smoke models: chosen 26 Oct, training guide in `backend/tools/vision_training/README.md` (YOLO11n fine-tuned on Colab; Construction-PPE and D-Fire datasets, licences listed there). Move the lines here once trained.
 
 ## Test data
 - `bus.jpg` sample image shipped inside the Ultralytics package (AGPL-3.0): converted to a short local test video to check detection. The video is not committed.
