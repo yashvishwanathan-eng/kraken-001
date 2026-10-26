@@ -77,6 +77,7 @@ export function level(): number {
 /* ── speaking ───────────────────────────────────────────── */
 
 let currentSource: AudioBufferSourceNode | null = null
+let speakTurn = 0 // each speak() gets a number; an older one that is still fetching audio never plays
 
 function stopSpeaking() {
   try {
@@ -131,6 +132,7 @@ async function speakWithBrowser(text: string): Promise<void> {
 /** Speak an answer: Rumik voice when it is set up, otherwise the browser's own voice. */
 export async function speak(text: string): Promise<void> {
   if (!text) return
+  const turn = ++speakTurn
   stopSpeaking()
   set({ state: snap.state === 'alarm' ? 'alarm' : 'speaking', answer: text })
   try {
@@ -140,9 +142,12 @@ export async function speak(text: string): Promise<void> {
       body: JSON.stringify({ text }),
     })
     if (!res.ok) throw new Error(`speak ${res.status}`)
+    const audio = await res.arrayBuffer()
+    if (turn !== speakTurn) return // a newer answer came while this one was loading: never two voices at once
     set({ voice: 'Rumik Silk' })
-    await playAudio(await res.arrayBuffer())
+    await playAudio(audio)
   } catch {
+    if (turn !== speakTurn) return
     analyser = null
     await speakWithBrowser(text)
   }
