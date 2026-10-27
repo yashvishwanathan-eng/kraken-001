@@ -33,14 +33,14 @@ Say the one-line summary first, then show the code. Jump to a line with `Ctrl+G`
 | # | Open | Line | Say this |
 |---|---|---|---|
 | 1 | `backend/worker/capture.py` | `class LatestFrameCapture` (line 45) | "Each camera has its own process. This thread reads the camera nonstop and keeps only the newest frame, so the AI never analyses old video, even if it is slow." |
-| 2 | `backend/worker/run_worker.py` | `def run` (215), the loop at 270 | "This is one camera's loop: people and pose (YOLO11), fire/smoke, helmet, faces, then the rules. The live view is a separate thread at 25 fps (`class LiveView`, 166), so video stays smooth while the AI works." |
-| 3 | `backend/worker/rules.py` | `class RulesEngine` (210), `_streak` (395), `_apply_cooldown` (429) | "Detections are not alarms. The rules decide: a person's feet in a restricted zone for N seconds, fire in 3 of the last 6 frames, a fall only if the torso is flat **and** the hips dropped. One wrong frame cannot raise an alarm. Every threshold comes from settings, not the code." |
-| 4 | `backend/app/services/escalation.py` | `ladder_for` (64), `_nobody_answered` (256) | "Who gets called depends on severity. Critical: Head Guard, Admin, Manager at once. If nobody acknowledges in 45 seconds, every guard on shift gets a call and a WhatsApp. It stops at the first acknowledgement from any channel." |
+| 2 | `backend/worker/run_worker.py` | `def run` (216) | "This is one camera's loop: people and pose (YOLO11), fire/smoke, helmet, faces, then the rules. The live view is a separate thread at 25 fps (`class LiveView`, 167), so video stays smooth while the AI works." |
+| 3 | `backend/worker/rules.py` | `class RulesEngine` (212), `_streak` (398), `_apply_cooldown` (432); and `worker/verify.py` `verify_fire_smoke` (68) | "Detections are not alarms. The rules decide: a person's feet in a restricted zone for N seconds, fire in 3 of the last 6 frames that also glows like a real flame, a fall only if the torso is flat **and** the hips dropped. One wrong frame cannot raise an alarm. Every threshold comes from settings, not the code." |
+| 4 | `backend/app/services/escalation.py` | `ladder_for` (87), `_earlier_same_emergency` (174), `_nobody_answered` (332) | "Who gets called depends on severity. Only fire, smoke and restricted entry ring phones. Head Guard, Admin and Manager are called; the Admin is always told. If nobody acknowledges in 45 seconds, every guard on shift gets a call and a WhatsApp. It stops at the first acknowledgement from any channel." |
 | 5 | `backend/app/services/call_agent.py` | `opening` (148), `decide` (248), `ACTIONS` (41) | "The phone call is a conversation. The LLM only returns `{reply, action}` and the action must be in this allowed list, so the AI can never do something we did not allow. A critical incident can only be acknowledged by phone, never closed." |
 | 6 | `backend/app/services/faces.py` | `class FaceEngine` (55), `class FaceBank` (118) | "Face recognition for restricted areas runs on the laptop. We keep only a 128-number fingerprint per photo, never the photo, and only with the person's consent. Allowed people walk in, anyone else raises an alarm." |
 | 7 | `backend/app/services/assistant.py` | `class IncidentFilter` (43), `ask` (177) | "Friday answers questions about incidents. The LLM only fills this filter; our code builds the database query. The LLM never writes SQL and never invents numbers." |
 
-Finish with the proof: run `pytest -q` in the terminal. It runs about 300 tests in 2 minutes and they pass.
+Finish with the proof: run `pytest -q` in the terminal. It runs 331 tests in about 2 minutes and they pass.
 
 ---
 
