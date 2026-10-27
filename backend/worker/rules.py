@@ -86,6 +86,7 @@ class RuleConfig:
     no_helmet_frames: int = 4
     extra_model_conf: float = 0.5
     fire_conf: float = 0.35  # a lighter's small flame scores lower than a big fire
+    smoke_conf: float = 0.5
     helmet_labels: tuple[str, ...] = ("helmet", "hardhat", "hard-hat")
     vest_labels: tuple[str, ...] = ("vest", "safety-vest", "safety vest")
     fire_labels: tuple[str, ...] = ("fire", "flame")
@@ -104,7 +105,7 @@ class RuleConfig:
             fall_hip_drop=s.fall_hip_drop, fall_down_s=s.fall_down_s, unattended_s=s.unattended_s,
             bag_still_frac=s.bag_still_frac, bag_reach_frac=s.bag_reach_frac,
             track_grace_s=s.track_grace_s, ppe_missing_frames=s.ppe_missing_frames, fire_frames=s.fire_frames,
-            smoke_frames=s.smoke_frames, no_helmet_frames=s.no_helmet_frames, fire_conf=s.fire_conf,
+            smoke_frames=s.smoke_frames, no_helmet_frames=s.no_helmet_frames, fire_conf=s.fire_conf, smoke_conf=s.smoke_conf,
             extra_model_conf=s.detect_conf, helmet_labels=labels(s.ppe_helmet_labels),
             vest_labels=labels(s.ppe_vest_labels), fire_labels=labels(s.fire_labels),
             smoke_labels=labels(s.smoke_labels), no_helmet_labels=labels(s.no_helmet_labels),
@@ -416,7 +417,7 @@ class RulesEngine:
         cfg = self.cfg
         return (self._streak("fire", "critical", cfg.fire_frames, cfg.fire_conf, cfg.fire_labels,
                              frame_w, frame_h, detections)
-                + self._streak("smoke", "high", cfg.smoke_frames, cfg.extra_model_conf, cfg.smoke_labels,
+                + self._streak("smoke", "high", cfg.smoke_frames, cfg.smoke_conf, cfg.smoke_labels,
                                frame_w, frame_h, detections))
 
     def _update_no_helmet(self, frame_w: int, frame_h: int, detections: list[DetectionObs]) -> list[Candidate]:

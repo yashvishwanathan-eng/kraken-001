@@ -62,3 +62,10 @@ def test_weak_fire_detection_is_ignored():
     engine = RulesEngine([], RuleConfig())
     weak = DetectionObs(FIRE.box, "smoke", 0.3)
     assert feed(engine, [{"fire": [weak]}] * 10) == []
+
+
+def test_thin_smoke_counts_when_smoke_conf_is_lowered():
+    thin = DetectionObs(FIRE.box, "smoke", 0.38)
+    assert feed(RulesEngine([], RuleConfig()), [{"fire": [thin]}] * 8) == []  # default 0.5: ignored
+    fired = feed(RulesEngine([], RuleConfig(smoke_conf=0.3)), [{"fire": [thin]}] * 8)
+    assert [c.type for _, c in fired] == ["smoke"]

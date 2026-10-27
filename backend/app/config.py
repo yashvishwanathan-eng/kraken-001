@@ -161,6 +161,7 @@ class Settings(BaseSettings):
     smoke_labels: str = "smoke"
     no_helmet_labels: str = "without helmet,without_helmet,no helmet,no-helmet,no_helmet,nohelmet,without-helmet"
     fire_conf: float = 0.35  # flames: lower than DETECT_CONF so a lighter's small flame still counts
+    smoke_conf: float = 0.5  # smoke: thin indoor smoke (incense) scores lower than a big plume; 0.3 to 0.4 for it
     smoke_frames: int = 5
     no_helmet_frames: int = 4
     ppe_missing_frames: int = 10
