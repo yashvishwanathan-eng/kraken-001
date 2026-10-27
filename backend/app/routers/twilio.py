@@ -97,6 +97,15 @@ def say(text: str, style: str = "calm") -> str:
     return call_voice.speech(text, style)
 
 
+def say_first(text: str, style: str = "calm") -> str:
+    """P42: the first sentence after they pick up. Twilio's voice speaks it at once (CALL_OPENING_VOICE=fast):
+    playing an audio file means Twilio must first download it through ngrok, which is seconds of silence."""
+    s = get_settings()
+    if s.call_opening_voice == "fast":
+        return f"<Say voice={quoteattr(s.call_say_voice)} language={quoteattr(s.call_language)}>{escape(text)}</Say>"
+    return say(text, style)
+
+
 def say_plain(text: str) -> str:
     return f"<Say language={quoteattr(get_settings().call_language)}>{escape(text)}</Say>"
 
@@ -361,15 +370,17 @@ def _open_conversation(db, call: Call) -> Response:
     if call.kind == "alert":
         if incident is None:
             return twiml(say("This alert is no longer active. Thank you."), "<Hangup/>")
-        if incident.status != "open":
-            by = f" by {incident.acknowledged_by}" if incident.acknowledged_by else ""
-            return twiml(say(f"Hi {call_agent.first_name(call.to_name)}, this is Friday. The "
-                             f"{call_agent.SITUATION.get(incident.type, incident.type).split(' ', 1)[-1]} was already "
-                             f"handled{by}. Thank you."), "<Hangup/>")
+        if incident.status != "open":  # P42: an always-call person (the Admin) is still told what happened
+            by = incident.acknowledged_by or "a guard"
+            state = "is on it" if incident.status == "acknowledged" else f"marked it {incident.status.replace('_', ' ')}"
+            text = (f"Hi {call_agent.first_name(call.to_name)}, this is Friday. {call_agent.situation(incident)} "
+                    f"{by} {state}. Open the dashboard to see it live. Thank you.")
+            conversations.call_turn(call.id, "friday", text)
+            return twiml(say_first(text), "<Hangup/>")
     conv = call_agent.start(call, incident)
     opening = conv.history[0]["content"]
     conversations.call_turn(call.id, "friday", opening)
-    return twiml(listen(call.id, say(opening, call_agent.style_for(conv.kind, conv.severity))))
+    return twiml(listen(call.id, say_first(opening, call_agent.style_for(conv.kind, conv.severity))))
 
 
 def _answer(call_id: int, turn: call_agent.Turn) -> Response:

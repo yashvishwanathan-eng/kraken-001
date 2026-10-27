@@ -28,6 +28,9 @@ FIXTURES = BACKEND_DIR / "tests" / "fixtures"
 os.environ["CAMERA_CONFIG_PATH"] = str(FIXTURES / "cameras.yaml")
 # the ladder tests use every incident type; the P40 default (fire, smoke, access only) has its own tests
 os.environ["CALL_TYPES"] = "fire,smoke,access,fall,unattended,crowding,ppe,loitering,no_helmet"
+os.environ["ALWAYS_CALL"] = ""  # the on-screen rule tests; P42's always-call admin has its own tests
+os.environ["CALL_OPENING_VOICE"] = "rumik"
+os.environ["CALL_REPLY_VOICE"] = "rumik"  # the Rumik voice tests; P42's fast opening has its own test
 
 
 @pytest.fixture(scope="session")

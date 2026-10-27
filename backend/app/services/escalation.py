@@ -31,7 +31,7 @@ the incident status before acting, so a step that slips through never calls afte
 import logging
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -74,6 +74,11 @@ def call_types(s: Settings) -> set[str]:
 FAMILY = {"smoke": "fire"}  # one emergency: smoke next to a fire is the same event
 
 
+def always_call(s: Settings) -> set[str]:
+    """P42: ladder targets (admin, manager, head_guard) whose call always goes out (see ALWAYS_CALL)."""
+    return {t.strip() for t in s.always_call.split(",") if t.strip()}
+
+
 def same_kind(kind: str) -> list[str]:
     family = FAMILY.get(kind, kind)
     return sorted({family} | {k for k, v in FAMILY.items() if v == family})
@@ -88,12 +93,16 @@ def ladder_for(severity: str, s: Settings, kind: str | None = None) -> list[Step
     # every guard on shift gets a WhatsApp and a call that tells them the problem (roll call).
     nobody = Step(s.no_answer_alert_all_s, "alert_all", "guards")
     if severity == "critical":
-        return [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"),
-                Step(0, "call", "admin", True), Step(s.onscreen_grace_s, "call", "manager", True), nobody]
-    if severity == "high":
-        return [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"), Step(0, "call", "manager", True),
-                Step(0, "call", "admin", True), nobody]
-    return [Step(0, "whatsapp", "zone_manager")]
+        steps = [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"),
+                 Step(0, "call", "admin", True), Step(s.onscreen_grace_s, "call", "manager", True), nobody]
+    elif severity == "high":
+        steps = [Step(0, "call", "head_guard"), Step(0, "whatsapp", "admin"), Step(0, "call", "manager", True),
+                 Step(0, "call", "admin", True), nobody]
+    else:
+        return [Step(0, "whatsapp", "zone_manager")]
+    always = always_call(s)  # P42: no on-screen wait for them: their phone rings at once
+    return [replace(st, delay_s=0, defer_on_screen=False) if st.action == "call" and st.who in always else st
+            for st in steps]
 
 
 def local_time_text(dt: datetime, tz: str) -> str:
@@ -174,9 +183,12 @@ class Escalation:
     def stop(self, incident_id: int, except_call_id: int | None = None) -> None:
         """Someone acknowledged or closed it: no more calls for this incident."""
         prefix = f"ladder:{incident_id}:"
+        keep_steps, keep_phones = self._still_to_call(incident_id)
         skipped = []
         for job in self.scheduler.get_jobs():
             if job.id.startswith(prefix):
+                if int(job.id.rsplit(":", 1)[1]) in keep_steps:
+                    continue  # P42: an always-call person is still told, even though someone else has it
                 job.remove()
                 with self._lock:
                     name = self._waiting.pop(job.id, None)
@@ -190,9 +202,28 @@ class Escalation:
                         incident_ops.add_timeline(incident, "call_skipped_on_screen", to=name)
                     db.commit()
                     manager.publish_from_thread(incident_ops.to_message(incident))
-        cancelled = self.calls.cancel_pending(incident_id)
-        hung = self.calls.hang_up_active(incident_id, except_call_id) if self.calls.mode == "live" else 0
+        cancelled = self.calls.cancel_pending(incident_id, keep_phones)
+        hung = (self.calls.hang_up_active(incident_id, except_call_id, keep_phones)
+                if self.calls.mode == "live" else 0)
         log.info("incident=%d step=ladder_stopped queued_cancelled=%d hung_up=%d", incident_id, cancelled, hung)
+
+    def _still_to_call(self, incident_id: int) -> tuple[set[int], frozenset[str]]:
+        """P42: after an acknowledgement, the ladder steps and phones of always-call people that still go
+        ahead: not when the incident is closed, and not for the person who acknowledged it themselves."""
+        always = always_call(self.settings)
+        with SessionLocal() as db:
+            incident = incident_ops.load(db, incident_id)
+            if incident is None or incident.status != "acknowledged" or not always:
+                return set(), frozenset()
+            steps, phones = set(), set()
+            for index, step in enumerate(ladder_for(incident.severity, self.settings, incident.type)):
+                if step.action != "call" or step.who not in always:
+                    continue
+                contacts, _ = self._contacts(db, step.who, incident)
+                if contacts and contacts[0].user_id != incident.acknowledged_by_user_id:
+                    steps.add(index)
+                    phones.add(contacts[0].phone)
+        return steps, frozenset(phones)
 
     def _contacts(self, db, who: str, incident: Incident) -> tuple[list[Contact], bool]:
         """(contacts, fallback): fallback=True when nobody of that role was on duty."""
@@ -243,7 +274,12 @@ class Escalation:
             if index >= len(steps):  # the settings changed since this job was scheduled
                 return
             step = steps[index]
-            if incident.status != "open":
+            told_anyway = (incident.status == "acknowledged" and step.action == "call"
+                           and step.who in always_call(self.settings))
+            if told_anyway:  # P42: always-call people are still rung, unless they acknowledged it themselves
+                contacts, _ = self._contacts(db, step.who, incident)
+                told_anyway = bool(contacts) and contacts[0].user_id != incident.acknowledged_by_user_id
+            if incident.status != "open" and not told_anyway:
                 log.info("incident=%d step=%d skipped: already %s", incident_id, index, incident.status)
                 if deferred:
                     contacts, _ = self._contacts(db, step.who, incident)

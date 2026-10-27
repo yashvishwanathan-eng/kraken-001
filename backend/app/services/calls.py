@@ -179,25 +179,26 @@ class CallService:
                 Call.kind == "alert", Call.to_phone == to_phone, Call.created_at >= since,
                 Incident.camera_id == camera_id, Call.status != "canceled").limit(1)) is not None
 
-    def cancel_pending(self, incident_id: int | None = None) -> int:
-        """Stop calls that have not been dialled yet (all, or one incident's). Returns how many."""
+    def cancel_pending(self, incident_id: int | None = None, keep_phones: frozenset[str] = frozenset()) -> int:
+        """Stop calls that have not been dialled yet (all, or one incident's), except to `keep_phones`."""
         with SessionLocal() as db:
             query = select(Call).where(Call.status == "queued")
             if incident_id is not None:
                 query = query.where(Call.incident_id == incident_id)
-            calls = list(db.scalars(query))
+            calls = [c for c in db.scalars(query) if c.to_phone not in keep_phones]
             for call in calls:
                 call.status = "canceled"
             db.commit()
             return len(calls)
 
-    def hang_up_active(self, incident_id: int | None = None, except_call_id: int | None = None) -> int:
+    def hang_up_active(self, incident_id: int | None = None, except_call_id: int | None = None,
+                       keep_phones: frozenset[str] = frozenset()) -> int:
         """Hang up calls that are ringing or connected (e.g. someone else already acknowledged)."""
         with SessionLocal() as db:
             query = select(Call).where(Call.call_sid.is_not(None), Call.status.not_in(FINAL_STATUSES))
             if incident_id is not None:
                 query = query.where(Call.incident_id == incident_id)
-            calls = [c for c in db.scalars(query) if c.id != except_call_id]
+            calls = [c for c in db.scalars(query) if c.id != except_call_id and c.to_phone not in keep_phones]
         hung = 0
         for call in calls:
             try:

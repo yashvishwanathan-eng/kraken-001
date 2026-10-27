@@ -133,6 +133,7 @@ Routing by severity:
   - 0 s: call the Manager (5 s if on screen).
   - 0 s: call the Admin too (5 s if on screen). Changed 26 Oct (P27): the whole hierarchy is called.
 - **Only fire, smoke and restricted entry call** (`CALL_TYPES`, P40, 27 Oct). Other types: dashboard + WhatsApp only. A repeat of an emergency that is still open (same camera, same kind) calls nobody (`repeat_of`); nobody is rung twice in `CALL_PERSON_GAP_S` for one camera.
+- **The Admin always gets a call** (`ALWAYS_CALL=admin`, P42): at 0 s, no on-screen wait, not cancelled when someone else acknowledges; hears who is on it.
 - **Nobody answered** (critical and high): still open after `NO_ANSWER_ALERT_ALL_S=45`: every guard on shift gets a WhatsApp and a roll-call phone call that says what happened (P27).
 - **Low** (ppe, loitering):
   - No calls.
@@ -224,5 +225,6 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Done (26 Oct, wake word kit): `backend/tools/wake_training/README.md` (Colab, openWakeWord automatic training, "hey friday" settings, download, tune the threshold); `WAKE_MODEL` accepts a trained file path (`models/hey_friday.onnx`), never downloads it, and says where it looked when it is missing.
 - Done (27 Oct, P40 after the jury demo): calls only for fire, smoke and restricted entry (`CALL_TYPES`); one emergency = one ladder (`repeat_of`); no phone rung twice in 2 min for one camera; one alarm per event in the worker (`REARM_QUIET_S`); fire/smoke boxes must look like flames/smoke in the picture (`worker/verify.py`, `VERIFY_FIRE`); FIRE/SMOKE_FRAMES at least 3; `tools/check_fire.py`. pytest: 324 passed.
 - Done (27 Oct, P41): faster: FIRE/SMOKE_FRAMES 3, ACCESS_DWELL_S 1.5, calls never wait for Rumik audio (0.8 s max, else Twilio's voice at once). pytest: 324 passed.
+- Done (27 Oct, P42): Admin always called (`ALWAYS_CALL`), first sentence and replies in Twilio's voice at once (`CALL_OPENING_VOICE`, `CALL_REPLY_VOICE=fast`). pytest: 331 passed.
 - Next (Kirito): fill `.env` (Twilio, WhatsApp, Groq, Ollama, phones, fire station, site address), port Bhoomi's WhatsApp format if different, choose PPE/fire models, real SOPs in `knowledge/`, sign off contract P1-P18, then the full testing checklist on the laptop.
 - Blockers: needs Kirito's keys and decisions above. Offline speech model download (Hugging Face) could not be tested in the sandbox. Not tested with a real webcam or phone camera.

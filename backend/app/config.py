@@ -102,15 +102,21 @@ class Settings(BaseSettings):
     call_voice: str = "rumik"  # rumik: phone calls speak in Friday's Rumik voice (falls back to twilio); twilio
     # fast: her answers made during a call use Twilio's Indian English voice at once (no 1-2 s wait for Rumik);
     # fixed sentences made in advance (opening, "one second", "Go, Ravi!") stay in the Rumik voice
-    call_reply_voice: str = "rumik"
+    call_reply_voice: str = "fast"  # P42: fast by default, same voice as the fast opening
     call_say_voice: str = "Polly.Kajal-Neural"  # Twilio voice for fast answers (Amazon Polly, Indian English)
     no_answer_alert_all_s: float = 45.0  # critical/high: nobody acknowledged by then -> alert every guard on shift
     # P40: only these incident types ever ring a phone; every other type shows on the dashboard and goes to WhatsApp
     call_types: str = "fire,smoke,access"
     # P40: a new incident of the same kind on the same camera while an earlier one (within this window) is still
     # open or acknowledged is the same emergency: it shows on the dashboard but calls nobody again
-    repeat_window_s: float = 600.0
-    call_person_gap_s: float = 120.0  # P40: never ring the same phone twice within this for the same camera
+    repeat_window_s: float = 120.0
+    # P42: these ladder steps (admin, manager, head_guard) always ring: no on-screen wait, and someone else
+    # acknowledging does not cancel or hang up their call (it stops only if they acknowledge it themselves)
+    always_call: str = "admin"
+    # P42: the first sentence of a call is spoken by Twilio's voice at once (no audio download = no silence);
+    # "rumik" plays Friday's Rumik file instead, which Twilio must first download through ngrok
+    call_opening_voice: str = "fast"
+    call_person_gap_s: float = 60.0  # P40: never ring the same phone twice within this for the same camera
     stream_token_ttl_s: int = 3600
     api_base_url: str = "http://127.0.0.1:8000"  # where workers send /internal calls
     session_ttl_h: float = 12.0  # a login lasts one shift
