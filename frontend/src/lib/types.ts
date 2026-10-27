@@ -159,6 +159,7 @@ export type ZonePolygon = Zone
 
 export interface Camera {
   id: string
+  number?: number | null  // "camera 6" by voice
   name: string
   stream_url: string
   online: boolean

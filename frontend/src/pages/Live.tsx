@@ -6,10 +6,12 @@
  * - Solid near-black (#0b0b0c) cards, 20px radius, 1px border at rgba(255,255,255,0.08).
  * - Monospace Geist Mono timestamps and metrics.
  * - Meaningful status indicators only.
+ * Click a camera (or ?focus=<id>, or Friday showing one camera) for the full-screen view (CameraFocus).
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { AnimatePresence } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import {
   Video,
@@ -21,9 +23,11 @@ import {
   AlertTriangle,
   X,
   ShieldAlert,
+  Maximize2,
 } from 'lucide-react'
 import { PageHeader } from '@/components/PageHeader'
 import { CameraStream } from '@/components/CameraStream'
+import { CameraFocus } from '@/components/live/CameraFocus'
 import { IncidentCard } from '@/components/IncidentCard'
 import { SkeletonCameraGrid } from '@/components/Skeletons'
 import { fetchCameras, fetchEvents } from '@/lib/api'
@@ -46,6 +50,10 @@ export function LivePage() {
   // ?cameras=a,b : only these cameras (Friday's "show cameras 3, 4 and 12")
   const [params, setParams] = useSearchParams()
   const onlyCameras = params.get('cameras')?.split(',').filter(Boolean) ?? null
+  // ?focus=<id>: one camera full screen. Friday showing exactly one camera opens it that way too.
+  const focusId = params.get('focus') ?? (onlyCameras?.length === 1 ? onlyCameras[0] : null)
+  const openFocus = useCallback((id: string) => setParams({ focus: id }), [setParams])
+  const closeFocus = useCallback(() => setParams({}), [setParams])
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [pulsingCameraIds, setPulsingCameraIds] = useState<Record<string, number>>({})
   const [toasts, setToasts] = useState<ToastAlert[]>([])
@@ -181,8 +189,22 @@ export function LivePage() {
     return unsubscribe
   }, [handleIncomingIncident])
 
+  const focused = focusId ? (cameras ?? []).find(c => c.id === focusId) : undefined
+
   return (
     <div className="space-y-4 overflow-x-hidden">
+      <AnimatePresence>
+        {focused && (
+          <CameraFocus
+            camera={focused}
+            cameras={cameras ?? []}
+            incidents={incidents}
+            onChange={openFocus}
+            onClose={closeFocus}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Toast notifications stack */}
       {toasts.length > 0 && (
         <aside
@@ -280,7 +302,12 @@ export function LivePage() {
                 return (
                   <div
                     key={camera.id}
-                    className={`rounded-[20px] border overflow-hidden flex flex-col transition-colors duration-200 ${
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open ${camera.name} full screen`}
+                    onClick={() => openFocus(camera.id)}
+                    onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFocus(camera.id) } }}
+                    className={`group/tile cursor-pointer rounded-[20px] border overflow-hidden flex flex-col transition-colors duration-200 hover:border-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40 ${
                       isPulsing ? 'pulse-critical border-[#f43f5e]' : ''
                     }`}
                     style={{
@@ -335,12 +362,15 @@ export function LivePage() {
                     {/* Stream Video Container */}
                     <div className="relative aspect-video bg-black flex items-center justify-center overflow-hidden">
                       {camera.online ? (
-                        <CameraStream
-                          cameraId={camera.id}
-                          initialStreamUrl={camera.stream_url}
-                          alt={camera.name}
-                          className="w-full h-full"
-                        />
+                        // paused behind the full-screen view: one stream per camera is enough
+                        focused ? null : (
+                          <CameraStream
+                            cameraId={camera.id}
+                            initialStreamUrl={camera.stream_url}
+                            alt={camera.name}
+                            className="w-full h-full"
+                          />
+                        )
                       ) : (
                         <div className="flex flex-col items-center justify-center text-[var(--text-muted)] gap-2 p-6">
                           <Video className="w-8 h-8 opacity-30" />
@@ -357,6 +387,12 @@ export function LivePage() {
                           </span>
                         </div>
                       )}
+
+                      {/* Full-screen hint on hover */}
+                      <div className="absolute top-2.5 left-2.5 flex items-center gap-1 px-2 py-0.5 rounded-[6px] bg-black/70 text-[10px] font-mono text-white opacity-0 transition-opacity group-hover/tile:opacity-100">
+                        <Maximize2 className="w-3 h-3" />
+                        <span>Full screen</span>
+                      </div>
 
                       {/* Red Pulse Warning Tag */}
                       {isPulsing && (

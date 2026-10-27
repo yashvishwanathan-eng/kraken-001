@@ -18,6 +18,7 @@ interface CameraStreamProps {
   alt?: string
   className?: string
   onLoad?: () => void
+  fit?: 'cover' | 'contain'  // contain: the whole picture, never cropped (full-screen view)
 }
 
 export function CameraStream({
@@ -26,6 +27,7 @@ export function CameraStream({
   alt = 'Live camera stream',
   className = '',
   onLoad,
+  fit = 'cover',
 }: CameraStreamProps) {
   const [streamUrl, setStreamUrl] = useState<string>(() =>
     resolveMediaUrl(initialStreamUrl || `/stream/${cameraId}`),
@@ -129,7 +131,7 @@ export function CameraStream({
         alt={alt}
         onError={handleError}
         onLoad={handleImageLoaded}
-        className="w-full h-full object-cover"
+        className={`w-full h-full ${fit === 'contain' ? 'object-contain' : 'object-cover'}`}
         loading="lazy"
       />
     </div>
