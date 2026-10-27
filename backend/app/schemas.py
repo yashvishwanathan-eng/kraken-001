@@ -40,6 +40,8 @@ class HealthResponse(BaseModel):
     db: Literal["ok", "error", "not_checked"]
     twilio: Literal["ok", "not_configured", "error", "not_checked"]
     llm: Literal["ok", "ollama_only", "error", "not_checked"]
+    calls_mode: Literal["live", "simulate", "off"] = "off"  # simulate = pretend calls: no phone rings
+    calls_error: str | None = None  # Twilio's message for the last failed call in the past 10 minutes
 
 
 class TimelineItem(BaseModel):

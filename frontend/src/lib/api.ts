@@ -286,6 +286,8 @@ export async function fetchHealth(): Promise<HealthResponse> {
       db: 'ok',
       twilio: 'ok',
       llm: 'ok',
+      calls_mode: 'simulate',
+      calls_error: null,
     }
   }
   return get<HealthResponse>('/health')

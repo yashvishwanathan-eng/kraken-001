@@ -262,14 +262,19 @@ export function Layout() {
               {/* Twilio */}
               <StatusPill
                 icon={<Phone className="w-3 h-3" />}
-                label="Calls"
-                online={twilioOnline}
+                label={health?.calls_error ? 'Calls failing' : health?.calls_mode === 'simulate' ? 'Calls: pretend' : health?.calls_mode === 'off' ? 'Calls off' : 'Calls'}
+                online={twilioOnline && health?.calls_mode !== 'off'}
+                tone={health?.calls_error ? 'bad' : health?.calls_mode === 'simulate' ? 'warn' : undefined}
                 title={
-                  health?.twilio === 'not_configured'
+                  health?.calls_error
+                    ? `The last call failed: ${health.calls_error}`
+                    : health?.calls_mode === 'simulate'
+                    ? 'CALLS_MODE=simulate: calls are only pretend, no phone rings. Set CALLS_MODE=live in backend/.env and restart.'
+                    : health?.calls_mode === 'off'
+                    ? 'Calls are off (CALLS_MODE=off, or no Twilio keys)'
+                    : health?.twilio === 'not_configured'
                     ? 'Twilio not configured'
-                    : twilioOnline
-                    ? 'Twilio voice/SMS online'
-                    : 'Twilio offline'
+                    : 'Real phone calls are on'
                 }
               />
             </div>
@@ -337,9 +342,10 @@ interface StatusPillProps {
   label: string
   online: boolean
   title: string
+  tone?: 'warn' | 'bad'  // amber: works but not for real; red: failing
 }
 
-function StatusPill({ icon, label, online, title }: StatusPillProps) {
+function StatusPill({ icon, label, online, title, tone }: StatusPillProps) {
   return (
     <div
       className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono border"
@@ -353,7 +359,7 @@ function StatusPill({ icon, label, online, title }: StatusPillProps) {
       <span
         className="w-1.5 h-1.5 rounded-full shrink-0"
         style={{
-          background: online ? '#10b981' : '#6b7280',
+          background: tone === 'bad' ? '#f43f5e' : tone === 'warn' ? '#f59e0b' : online ? '#10b981' : '#6b7280',
         }}
       />
       <span className="text-[var(--text-muted)]">{icon}</span>

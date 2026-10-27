@@ -116,6 +116,7 @@ class CallService:
         self._queue: queue.Queue[int | None] = queue.Queue()
         self._thread: threading.Thread | None = None
         self._last_dial = 0.0
+        self.last_error: tuple[float, str] | None = None  # (monotonic time, Twilio's message) of the last failed dial
 
     @property
     def mode(self) -> str:
@@ -217,6 +218,7 @@ class CallService:
             sid = self.client.create_call(to_phone, call_id, speak_only)
         except TwilioError as exc:
             log.error("call=%d step=dial failed: %s (WhatsApp and the dashboard still alert)", call_id, exc)
+            self.last_error = (time.monotonic(), str(exc)[:300])
             with SessionLocal() as db:
                 call = db.get(Call, call_id)
                 call.status = "failed"
@@ -226,6 +228,7 @@ class CallService:
             call = db.get(Call, call_id)
             call.call_sid, call.status = sid, "initiated"
             db.commit()
+        self.last_error = None
         log.info("call=%d step=dial sid=%s ms=%.1f", call_id, sid, (time.perf_counter() - t0) * 1000)
         self._after_placed(call_id)
 

@@ -207,6 +207,8 @@ export interface HealthResponse {
   db: DbHealth | boolean
   twilio: TwilioHealth | boolean
   llm: LlmHealth | boolean
+  calls_mode?: 'live' | 'simulate' | 'off'  // simulate = pretend calls: no phone rings
+  calls_error?: string | null               // Twilio's message for the last failed call (10 min)
 }
 
 /* ── Stats ─────────────────────────────────────────────── */
