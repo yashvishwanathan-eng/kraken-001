@@ -46,6 +46,8 @@ def status() -> str:
 def _groq(messages: list[dict], json_mode: bool, tools: list[dict] | None = None) -> dict:
     s = get_settings()
     body: dict = {"model": s.groq_model, "messages": messages, "temperature": 0}
+    if s.groq_model.startswith("openai/gpt-oss"):
+        body["reasoning_effort"] = "low"  # these models think before answering; short thinking keeps calls fast
     if json_mode:
         body["response_format"] = {"type": "json_object"}
     if tools:

@@ -89,6 +89,23 @@ def test_groq_failure_falls_back_to_ollama(monkeypatch):
     assert sum("groq" in h for h in hits) == 2  # one try + one retry before falling back
 
 
+def test_gpt_oss_models_think_briefly(monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "groq_api_key", "k")
+    bodies = []
+
+    def fake_post(url, json=None, **kwargs):
+        bodies.append(json)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "{}"}}]},
+                              request=httpx.Request("POST", url))
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    for model in ("openai/gpt-oss-20b", "qwen/qwen3.8-27b"):
+        monkeypatch.setattr(s, "groq_model", model)
+        llm.chat_json([{"role": "user", "content": "x"}])
+    assert bodies[0]["reasoning_effort"] == "low" and "reasoning_effort" not in bodies[1]
+
+
 def test_offline_mode_skips_groq(monkeypatch):
     s = get_settings()
     monkeypatch.setattr(s, "groq_api_key", "k")
