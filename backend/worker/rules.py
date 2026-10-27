@@ -8,6 +8,7 @@ Zone polygons are fractions of the frame (0..1), so the same zone works at any r
 """
 
 import math
+from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
@@ -18,6 +19,7 @@ Box = tuple[float, float, float, float]  # x1, y1, x2, y2 in pixels
 BAG_IOU_MATCH = 0.3  # a new bag box overlapping an old one this much is the same bag
 BAG_FORGET_S = 5.0  # forget a bag not seen for this long
 UPRIGHT_FORGET_S = 30.0  # forget a person's upright hip height after this long unseen
+STREAK_SLACK = 3  # fire, smoke, no helmet: N sightings within the last N + 3 analysed frames (5 of 8)
 
 
 # ---------- data in and out ----------
@@ -215,7 +217,8 @@ class RulesEngine:
         self._bags: list[_BagState] = []
         self._last_fired: dict[str, float] = {}
         self._ppe_missing: dict[int, int] = {}  # track -> consecutive analysed frames without helmet/vest
-        self._streaks = {"fire": 0, "smoke": 0, "no_helmet": 0}  # consecutive analysed frames with each
+        # the last few analysed frames for each kind: True = seen (fire flickers, so a miss does not reset the count)
+        self._streaks: dict[str, deque[bool]] = {"fire": deque(), "smoke": deque(), "no_helmet": deque()}
 
     def set_zones(self, zones: list[ZoneDef]) -> None:
         self.zones = zones
@@ -390,19 +393,22 @@ class RulesEngine:
 
     def _streak(self, kind: str, severity: str, needed: int, conf: float, labels_: tuple[str, ...],
                 frame_w: int, frame_h: int, detections: list[DetectionObs]) -> list[Candidate]:
-        """One kind of thing seen in N consecutive analysed frames (confidence at least `conf`) -> a candidate."""
+        """One kind of thing seen in N of the last N + STREAK_SLACK analysed frames (confidence at least `conf`)
+        -> a candidate. A flame flickers and the model misses it now and then; one miss must not start the count
+        again, but one stray frame can never raise an alarm either."""
         seen = [d for d in detections if d.label in labels_ and d.confidence >= conf]
-        if not seen:
-            self._streaks[kind] = 0
-            return []
-        self._streaks[kind] += 1
-        if self._streaks[kind] < needed:
+        history = self._streaks[kind]
+        history.append(bool(seen))
+        while len(history) > needed + STREAK_SLACK:
+            history.popleft()
+        hits = sum(history)
+        if not seen or hits < needed:
             return []
         strongest = max(seen, key=lambda d: d.confidence)
         spot = feet_point(strongest.box, frame_w, frame_h)
         zone = next((z.name for z in self.zones if point_in_polygon(spot, z.polygon)), None)
         return [Candidate(kind, severity, zone, strongest.confidence, (),
-                          f"{strongest.label} in {self._streaks[kind]} frames in a row")]
+                          f"{strongest.label} in {hits} of the last {len(history)} frames")]
 
     def _update_fire(self, frame_w: int, frame_h: int, detections: list[DetectionObs]) -> list[Candidate]:
         """Fire (critical) and smoke (high) are separate incidents, each needing N frames in a row. Flames use a

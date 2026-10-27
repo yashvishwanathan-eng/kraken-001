@@ -30,3 +30,11 @@ def test_live_view_keeps_publishing_while_analysis_is_slow():
     view.stop()
     assert len(mjpeg.frames) >= 4  # about LIVE_FPS frames a second, not one per analysed frame
     assert mjpeg.frames[0][:2] == b"\xff\xd8"  # JPEG
+
+
+def test_fire_boxes_are_drawn_with_their_score():
+    from worker.rules import DetectionObs
+    from worker.run_worker import draw_things
+
+    image = draw_things(np.zeros((100, 100, 3), np.uint8), [DetectionObs((20, 30, 60, 90), "fire", 0.41)])
+    assert tuple(image[60, 20]) == (0, 115, 249)  # orange box edge

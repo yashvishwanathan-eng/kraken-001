@@ -146,12 +146,27 @@ def annotate(image: np.ndarray, zones: list[ZoneDef], people: list[Person], fps_
     return out
 
 
+THING_COLOURS = {"fire": (0, 115, 249), "flame": (0, 115, 249), "smoke": (175, 163, 156)}  # BGR: orange, grey
+
+
+def draw_things(image: np.ndarray, things: list[DetectionObs]) -> np.ndarray:
+    """Fire, smoke and rider boxes with their score, so a test shows what the model sees (rules decide alarms)."""
+    for d in things:
+        x1, y1, x2, y2 = (int(v) for v in d.box)
+        colour = THING_COLOURS.get(d.label, (255, 0, 255))
+        cv2.rectangle(image, (x1, y1), (x2, y2), colour, 2)
+        cv2.putText(image, f"{d.label} {d.confidence:.2f}", (x1, max(y1 - 6, 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
+                    colour, 2)
+    return image
+
+
 class LiveView:
     """Publishes the newest camera frame LIVE_FPS times a second with the last analysis drawn on it."""
 
     def __init__(self, capture: LatestFrameCapture, mjpeg: MjpegServer, zones: list[ZoneDef]) -> None:
         self.capture, self.mjpeg = capture, mjpeg
         self.zones, self.people, self.names, self.fps_text = zones, [], None, "starting..."
+        self.things: list[DetectionObs] = []  # fire, smoke and helmet boxes of the last analysed frame
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._run, name="live-view", daemon=True)
 
@@ -171,7 +186,8 @@ class LiveView:
                 continue
             last_id = frame.frame_id
             try:
-                image = annotate(frame.image, self.zones, self.people, self.fps_text, self.names)
+                image = draw_things(annotate(frame.image, self.zones, self.people, self.fps_text, self.names),
+                                    self.things)
                 ok, jpeg = cv2.imencode(".jpg", image, [cv2.IMWRITE_JPEG_QUALITY, JPEG_QUALITY])
                 if ok:
                     self.mjpeg.publish(jpeg.tobytes())
@@ -294,6 +310,7 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
             if faces_on is not None:
                 timings["faces"] = (time.perf_counter() - t1) * 1000
             view.people, view.names = people, names
+            view.things = (fire or []) + (riders or [])
             candidates = engine.update(now, datetime.now(timezone.utc), w, h, [to_obs(p) for p in people], bags,
                                        ppe=ppe, fire=fire, riders=riders, identities=names)
 

@@ -206,3 +206,18 @@ def test_rider_without_a_helmet():
     assert engine.update(1.0, now, 640, 480, [], riders=rider) == []
     found = engine.update(2.0, now, 640, 480, [], riders=rider)
     assert [(c.type, c.severity) for c in found] == [("no_helmet", "low")]
+
+
+def test_a_flickering_flame_still_counts_but_one_stray_frame_never_does():
+    from worker.rules import DetectionObs, RuleConfig, RulesEngine
+
+    engine = RulesEngine([], RuleConfig(fire_frames=5, cooldown_s=60))
+    flame = [DetectionObs((300, 200, 320, 240), "fire", 0.5)]
+    day = datetime(2026, 10, 27, 10, 0, tzinfo=timezone.utc)
+    pattern = [flame, flame, [], flame, flame, [], flame]  # the model misses the flame now and then
+    found = [c for i, f in enumerate(pattern) for c in engine.update(float(i), day, 640, 480, [], fire=f)]
+    assert [c.type for c in found] == ["fire"] and "5 of the last" in found[0].reason
+
+    engine = RulesEngine([], RuleConfig(fire_frames=5, cooldown_s=60))
+    stray = [flame, [], [], flame, [], [], flame, [], [], flame]  # an orange shirt now and then
+    assert [c for i, f in enumerate(stray) for c in engine.update(float(i), day, 640, 480, [], fire=f)] == []

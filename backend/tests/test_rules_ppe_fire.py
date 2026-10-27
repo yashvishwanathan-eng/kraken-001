@@ -51,10 +51,11 @@ def test_fire_in_five_frames_in_a_row():
     assert [(i, c.type, c.severity) for i, c in fired] == [(4, "fire", "critical")]
 
 
-def test_flicker_does_not_count_as_fire():
-    engine = RulesEngine([], RuleConfig())
-    frames = ([{"fire": [FIRE]}] * 4 + [{"fire": []}]) * 3
-    assert feed(engine, frames) == []
+def test_a_flame_seen_now_and_then_is_not_a_fire_but_a_flickering_one_is():
+    rare = ([{"fire": [FIRE]}] + [{"fire": []}] * 2) * 6  # seen in 1 of 3 frames: a reflection, an orange shirt
+    assert feed(RulesEngine([], RuleConfig()), rare) == []
+    flicker = ([{"fire": [FIRE]}] * 4 + [{"fire": []}]) * 3  # a real flame the model misses now and then
+    assert [c.type for _, c in feed(RulesEngine([], RuleConfig()), flicker)] == ["fire"]
 
 
 def test_weak_fire_detection_is_ignored():
