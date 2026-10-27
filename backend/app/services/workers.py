@@ -11,6 +11,7 @@ presses Start, and a crashed worker stays stopped until someone starts it again.
 """
 
 import logging
+import os
 import subprocess
 import sys
 import threading
@@ -18,11 +19,44 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+import psutil
+
 from app.config import BACKEND_DIR, get_settings
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # Windows: no console window pops up per worker
 
 log = logging.getLogger("safetyai.workers")
+
+
+def stray_workers(camera_id: str, keep_pid: int | None = None) -> list[psutil.Process]:
+    """Worker processes for this camera that the API does not hold: left over from an earlier API run, or started
+    by hand. Two workers on one camera fight over the webcam and the CPU (and the second exits with code 1)."""
+    found = []
+    for proc in psutil.process_iter(["pid", "cmdline"]):
+        try:
+            cmd = proc.info["cmdline"] or []
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+        if proc.info["pid"] in (keep_pid, os.getpid()) or "worker.run_worker" not in cmd:
+            continue
+        if "--camera" in cmd and cmd.index("--camera") + 1 < len(cmd) and cmd[cmd.index("--camera") + 1] == camera_id:
+            found.append(proc)
+    return found
+
+
+def stop_strays(camera_id: str, keep_pid: int | None = None) -> int:
+    procs = stray_workers(camera_id, keep_pid)
+    for proc in procs:
+        try:
+            proc.terminate()
+        except psutil.NoSuchProcess:
+            pass
+    _, alive = psutil.wait_procs(procs, timeout=5)
+    for proc in alive:
+        proc.kill()
+    if procs:
+        log.warning("camera=%s stopped %d leftover worker(s): %s", camera_id, len(procs), [p.pid for p in procs])
+    return len(procs)
 
 
 @dataclass
@@ -47,7 +81,8 @@ class WorkerSupervisor:
     def _launch(self, camera_id: str) -> subprocess.Popen:
         log_file = open(self._log_path(camera_id), "ab")  # the child keeps its own copy of the handle
         try:
-            return subprocess.Popen([sys.executable, "-m", "worker.run_worker", "--camera", camera_id],
+            return subprocess.Popen([sys.executable, "-m", "worker.run_worker", "--camera", camera_id,
+                                     "--parent-pid", str(os.getpid())],
                                     cwd=BACKEND_DIR, stdout=log_file, stderr=subprocess.STDOUT,
                                     creationflags=NO_WINDOW)
         finally:
@@ -60,20 +95,21 @@ class WorkerSupervisor:
             if current is not None and current.process.poll() is None:
                 current.wanted = True
                 return False
+            stop_strays(camera_id)  # an old worker would hold the webcam and make this one exit with code 1
             process = self._launch(camera_id)
             self._workers[camera_id] = WorkerProcess(camera_id, process, datetime.now(timezone.utc))
         log.info("camera=%s worker started pid=%d", camera_id, process.pid)
         return True
 
     def stop(self, camera_id: str, timeout_s: float = 5.0) -> bool:
-        """Stop the worker. False if it was not running."""
+        """Stop the worker (and any leftover one for this camera). False if none was running."""
         with self._lock:
             current = self._workers.get(camera_id)
-            if current is None:
-                return False
-            current.wanted = False
-        if current.process.poll() is not None:
-            return False
+            if current is not None:
+                current.wanted = False
+        strays = stop_strays(camera_id, current.process.pid if current is not None else None)
+        if current is None or current.process.poll() is not None:
+            return strays > 0
         current.process.terminate()
         try:
             current.process.wait(timeout_s)
@@ -90,6 +126,10 @@ class WorkerSupervisor:
         """{managed, running, pid, started_at, exit_code}. managed=False: started by hand (or not at all)."""
         with self._lock:
             current = self._workers.get(camera_id)
+        if current is None or current.process.poll() is not None:
+            stray = next(iter(stray_workers(camera_id)), None)
+            if stray is not None:  # running outside the API: Stop and Restart deal with it
+                return {"managed": False, "running": True, "pid": stray.pid, "started_at": None, "exit_code": None}
         if current is None:
             return {"managed": False, "running": False, "pid": None, "started_at": None, "exit_code": None}
         code = current.process.poll()

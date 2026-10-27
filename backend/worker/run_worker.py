@@ -153,7 +153,10 @@ def draw_things(image: np.ndarray, things: list[DetectionObs]) -> np.ndarray:
     """Fire, smoke and rider boxes with their score, so a test shows what the model sees (rules decide alarms)."""
     for d in things:
         x1, y1, x2, y2 = (int(v) for v in d.box)
-        colour = THING_COLOURS.get(d.label, (255, 0, 255))
+        colour = THING_COLOURS.get(d.label) or (
+            (21, 204, 250) if "helmet" in d.label and ("no" in d.label or "without" in d.label)  # safety yellow
+            else (94, 197, 34) if "helmet" in d.label  # a helmet on: green
+            else (21, 204, 250) if d.label in ("bald", "cap", "face and hair") else (255, 0, 255))
         cv2.rectangle(image, (x1, y1), (x2, y2), colour, 2)
         cv2.putText(image, f"{d.label} {d.confidence:.2f}", (x1, max(y1 - 6, 12)), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                     colour, 2)
@@ -348,13 +351,33 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     return 0
 
 
+def watch_parent(parent_pid: int, every_s: float = 2.0) -> None:
+    """A worker started by the API stops when the API stops (or reloads), so no old worker keeps the camera
+    with old settings after a restart."""
+    import os
+
+    import psutil
+
+    def check() -> None:
+        while True:
+            time.sleep(every_s)
+            if not psutil.pid_exists(parent_pid):
+                log.warning("the API (pid %d) is gone: worker stopping", parent_pid)
+                os._exit(0)
+
+    threading.Thread(target=check, name="parent-watch", daemon=True).start()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="RingGuard camera worker")
     parser.add_argument("--camera", required=True, help="camera id from config/cameras.yaml")
     parser.add_argument("--seconds", type=float, default=0, help="stop after N seconds (0 = run forever)")
     parser.add_argument("--source", help="testing only: use this video file or URL instead of the config source")
+    parser.add_argument("--parent-pid", type=int, help="set by the API: stop when that process is gone")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+    if args.parent_pid:
+        watch_parent(args.parent_pid)
     return run(args.camera, args.seconds, args.source)
 
 

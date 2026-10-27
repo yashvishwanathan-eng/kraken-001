@@ -23,3 +23,4 @@ onnxruntime==1.31.0
 openwakeword==0.6.0
 vosk==0.3.45
 sounddevice==0.5.6
+psutil>=5.9

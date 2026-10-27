@@ -3,6 +3,7 @@
  * One place for how an incident looks in the app:
  *   fire  -> orange everywhere (badge, type, alarm glow, banner)
  *   smoke -> grey
+ *   no_helmet -> safety yellow (hi-vis), so a rider without a helmet never looks like a fire or an emergency
  *   every other emergency -> its severity colour (critical red, high amber, low blue)
  */
 import type { IncidentType, Severity } from './types'
@@ -13,7 +14,7 @@ export const TYPE_LABEL: Record<string, string> = {
 }
 
 const SEVERITY_RGB: Record<Severity, string> = { critical: '244,63,94', high: '245,158,11', low: '59,130,246' }
-const TYPE_RGB: Partial<Record<IncidentType, string>> = { fire: '249,115,22', smoke: '156,163,175' }
+const TYPE_RGB: Partial<Record<IncidentType, string>> = { fire: '249,115,22', smoke: '156,163,175', no_helmet: '250,204,21' }
 
 /** "r,g,b" for this incident: use as rgb(...) or rgba(..., alpha). */
 export function incidentRgb(type: string, severity: Severity): string {
