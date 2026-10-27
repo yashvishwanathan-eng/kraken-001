@@ -44,7 +44,8 @@ def fake_twilio(monkeypatch, verified, ngrok_up=True):
 def setup(monkeypatch, roster):
     s = get_settings()
     for key, value in [("twilio_account_sid", "AC123"), ("twilio_auth_token", "tok"),
-                       ("twilio_from_number", "+15550000000"), ("public_base_url", "https://x.ngrok.app")]:
+                       ("twilio_from_number", "+15550000000"), ("public_base_url", "https://x.ngrok.app"),
+                       ("calls_mode", "live")]:
         monkeypatch.setattr(s, key, value)
     people = list(roster.scalars(select(Responder).where(Responder.active.is_(True))))
     monkeypatch.setattr(check_twilio, "call_list", lambda: people)
@@ -71,3 +72,14 @@ def test_unverified_phone_and_ngrok_down_are_reported(monkeypatch, roster, capsy
     out = capsys.readouterr().out
     assert f"{people[0].name} ...{people[0].phone[-4:]} is NOT verified" in out
     assert "start ngrok http 8000" in out
+
+
+def test_pretend_calls_are_reported_as_a_problem(monkeypatch, roster, capsys):
+    people = setup(monkeypatch, roster)
+    fake_twilio(monkeypatch, [p.phone for p in people])
+    monkeypatch.setattr(get_settings(), "calls_mode", "simulate")
+    monkeypatch.setenv("CALLS_MODE", "simulate")  # a Windows variable that hides the .env value
+    monkeypatch.setattr("sys.argv", ["check_twilio"])
+    assert check_twilio.main() == 1
+    out = capsys.readouterr().out
+    assert "calls are not real: CALLS_MODE=simulate" in out and "Windows environment variable" in out
