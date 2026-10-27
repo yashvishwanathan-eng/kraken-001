@@ -63,6 +63,28 @@ Yes, three, on Google Colab (free T4 GPU), starting from YOLO11n:
 Person detection and pose use the standard pretrained YOLO11n-pose. Face recognition uses OpenCV's pretrained
 YuNet and SFace models. We did not train those.
 
+### "Did you train the LLM?" (the honest answer is no, and that is a design choice)
+"No. We did not train or fine-tune a language model. We use a ready-made open model, `gpt-oss-20b`, through Groq,
+and `llama3.2:3b` on the laptop through Ollama when there is no internet. What we built is how it is used safely:
+it only fills in a small fixed form (a JSON filter, or a reply plus one action from an allowed list), and our code
+checks it and does the work. It never writes SQL and cannot do anything we did not allow. Simple orders like
+'I'm going' or 'show camera 3' do not use the LLM at all; a keyword match answers them instantly."
+Why not train one: no labelled conversation data, no GPU, and a fine-tuned model would still need the same safety
+checks. If asked how good it is: we test the parser and every allowed action with automatic tests; we have not
+measured the LLM's accuracy on a benchmark (say so).
+
+### "How did you train the vision models?"
+On Google Colab's free T4 GPU, starting from the pretrained YOLO11n (transfer learning: it already knows shapes
+and edges; we teach it our classes), images at 480 px, then exported to OpenVINO for the Intel laptop.
+- **Fire and smoke:** the public D-Fire dataset (about 21,000 images, from Roboflow Universe) plus about 200 of our
+  own lighter and no-flame photos from our webcam (boxed with Roboflow Auto Label, checked by hand). 40 epochs,
+  stops early when it stops improving. Validation mAP50: 0.66 overall, smoke 0.73, fire 0.59.
+- **Helmet and vest (PPE):** Ultralytics Construction-PPE (1,416 images). mAP50: helmet 0.83, vest 0.83.
+- **Rider without a helmet:** Roboflow "Helmet & No helmet detection" (984 images).
+- **Not trained by us:** people and pose (YOLO11n-pose), bags (YOLO11n), faces (YuNet + SFace). These are pretrained.
+Fire is the hardest class (flames change shape and colour), which is why an alarm also needs 3 of the last 6 frames
+and a flame-colour check in the picture.
+
 ### "What does mAP50 mean?"
 "Of the boxes the model draws, how well they match the real objects, averaged over classes, counting a box as right
 when it overlaps the true box by at least half. 1.0 is perfect."
