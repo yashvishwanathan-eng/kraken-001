@@ -227,5 +227,6 @@ Detection 8+ analysed FPS per camera (2 cameras) · incident to dashboard < 2 s 
 - Done (27 Oct, P41): faster: FIRE/SMOKE_FRAMES 3, ACCESS_DWELL_S 1.5, calls never wait for Rumik audio (0.8 s max, else Twilio's voice at once). pytest: 324 passed.
 - Done (27 Oct, P42): Admin always called (`ALWAYS_CALL`), first sentence and replies in Twilio's voice at once (`CALL_OPENING_VOICE`, `CALL_REPLY_VOICE=fast`). pytest: 331 passed.
 - Done (27 Oct, P43): workers make missing OpenVINO copies themselves (3 cameras: 0.3 -> 3-4 analysed fps each on 4 cores); live view encodes only while watched; HELMET_CAMERAS warning. pytest: 334 passed.
+- Done (27 Oct, P44): calls back in Friday's Rumik voice (opening and replies), saved as small 8 kHz phone audio. pytest: 336 passed.
 - Next (Kirito): fill `.env` (Twilio, WhatsApp, Groq, Ollama, phones, fire station, site address), port Bhoomi's WhatsApp format if different, choose PPE/fire models, real SOPs in `knowledge/`, sign off contract P1-P18, then the full testing checklist on the laptop.
 - Blockers: needs Kirito's keys and decisions above. Offline speech model download (Hugging Face) could not be tested in the sandbox. Not tested with a real webcam or phone camera.

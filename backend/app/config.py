@@ -102,7 +102,7 @@ class Settings(BaseSettings):
     call_voice: str = "rumik"  # rumik: phone calls speak in Friday's Rumik voice (falls back to twilio); twilio
     # fast: her answers made during a call use Twilio's Indian English voice at once (no 1-2 s wait for Rumik);
     # fixed sentences made in advance (opening, "one second", "Go, Ravi!") stay in the Rumik voice
-    call_reply_voice: str = "fast"  # P42: fast by default, same voice as the fast opening
+    call_reply_voice: str = "rumik"  # P44: Friday's Rumik voice again (files are now small phone audio)
     call_say_voice: str = "Polly.Kajal-Neural"  # Twilio voice for fast answers (Amazon Polly, Indian English)
     no_answer_alert_all_s: float = 45.0  # critical/high: nobody acknowledged by then -> alert every guard on shift
     # P40: only these incident types ever ring a phone; every other type shows on the dashboard and goes to WhatsApp
@@ -113,9 +113,9 @@ class Settings(BaseSettings):
     # P42: these ladder steps (admin, manager, head_guard) always ring: no on-screen wait, and someone else
     # acknowledging does not cancel or hang up their call (it stops only if they acknowledge it themselves)
     always_call: str = "admin"
-    # P42: the first sentence of a call is spoken by Twilio's voice at once (no audio download = no silence);
-    # "rumik" plays Friday's Rumik file instead, which Twilio must first download through ngrok
-    call_opening_voice: str = "fast"
+    # P44: the first sentence of a call in Friday's Rumik voice (made while the phone rings, saved as small phone
+    # audio so it plays at once); "fast" = Twilio's own voice for it
+    call_opening_voice: str = "rumik"
     call_person_gap_s: float = 60.0  # P40: never ring the same phone twice within this for the same camera
     stream_token_ttl_s: int = 3600
     api_base_url: str = "http://127.0.0.1:8000"  # where workers send /internal calls

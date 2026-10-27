@@ -96,3 +96,30 @@ def test_fast_replies_speak_new_sentences_at_once(monkeypatch, tmp_path):
     assert new.startswith("<Say voice=") and "Polly.Kajal-Neural" in new  # no wait for Rumik
     (tmp_path / call_voice.file_name("Go, Ravi!")).write_bytes(b"wav")
     assert call_voice.speech("Go, Ravi!").startswith("<Play>")  # made in advance: still the Rumik voice
+
+
+def test_rumik_audio_is_shrunk_to_phone_audio(tmp_path):
+    """P44: Rumik's WAV becomes 8 kHz mono mu-law (what a phone line carries), several times smaller."""
+    import subprocess
+
+    from app.services import call_voice
+
+    src = tmp_path / "rumik.wav"
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=2",
+                    "-ar", "24000", "-ac", "1", "-c:a", "pcm_s16le", str(src)], check=True)
+    small = call_voice.phone_wav(src.read_bytes())
+    assert len(small) < len(src.read_bytes()) / 4
+    out = tmp_path / "phone.wav"
+    out.write_bytes(small)
+    header = out.read_bytes()[:44]  # mu-law WAV: read the sample rate from the header
+    assert header[:4] == b"RIFF" and int.from_bytes(header[24:28], "little") == 8000
+
+
+def test_phone_audio_falls_back_to_the_original_without_ffmpeg(monkeypatch):
+    from app.services import call_voice
+
+    def missing(*a, **k):
+        raise FileNotFoundError("ffmpeg")
+
+    monkeypatch.setattr(call_voice.subprocess, "run", missing)
+    assert call_voice.phone_wav(b"RIFF-original") == b"RIFF-original"

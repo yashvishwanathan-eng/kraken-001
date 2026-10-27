@@ -11,6 +11,7 @@ the call uses <Say> instead, so a call never goes silent. After a Rumik failure 
 
 import hashlib
 import logging
+import subprocess
 import threading
 import time
 from xml.sax.saxutils import escape, quoteattr
@@ -22,6 +23,7 @@ from app.services.permissions import share_url
 log = logging.getLogger("safetyai.call_voice")
 
 RETRY_AFTER_S = 60.0
+NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)  # Windows: ffmpeg runs without a console window
 READY_WAIT_S = 0.8  # longest a caller waits for a sentence that is still being made in the Rumik voice
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
@@ -38,6 +40,24 @@ def enabled() -> bool:
     s = get_settings()
     return (s.call_voice == "rumik" and bool(s.rumik_api_key and s.rumik_gateway_url)
             and s.public_base_url.startswith(("https://", "http://")))
+
+
+def phone_wav(audio: bytes) -> bytes:
+    """P44: Rumik's WAV as phone audio (8 kHz mono mu-law), about 6x smaller, so Twilio fetches it through ngrok
+    quickly and the caller hears no gap. A phone line carries 8 kHz anyway, so it sounds the same. If FFmpeg is
+    missing or fails, the original WAV is kept."""
+    try:
+        done = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-ar", "8000", "-ac", "1",
+             "-c:a", "pcm_mulaw", "-f", "wav", "pipe:1"],
+            input=audio, capture_output=True, timeout=5, creationflags=NO_WINDOW)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("call voice: could not shrink the audio for the phone (%s); sending it as made", exc)
+        return audio
+    if done.returncode != 0 or not done.stdout:
+        log.warning("call voice: ffmpeg could not shrink the audio; sending it as made")
+        return audio
+    return done.stdout
 
 
 def audio_link(text: str, style: str = "calm") -> str | None:
@@ -57,8 +77,10 @@ def audio_link(text: str, style: str = "calm") -> str | None:
                 _failed_at = time.monotonic()
                 log.warning("call voice: Rumik failed (%s); Twilio's own voice for the next minute", exc)
                 return None
-            path.write_bytes(audio)
-            log.info("call voice: made %s in %d ms (%d chars)", name, ms, len(text))
+            small = phone_wav(audio)
+            path.write_bytes(small)
+            log.info("call voice: made %s in %d ms (%d chars, %d KB for the phone)", name, ms, len(text),
+                     len(small) // 1024)
     return share_url(name)
 
 
