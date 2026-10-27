@@ -16,8 +16,9 @@ class FakeCapture:
 
 
 class FakeMjpeg:
-    def __init__(self):
+    def __init__(self, viewers=1):
         self.frames = []
+        self.viewers = viewers
 
     def publish(self, jpeg):
         self.frames.append(jpeg)
@@ -30,6 +31,14 @@ def test_live_view_keeps_publishing_while_analysis_is_slow():
     view.stop()
     assert len(mjpeg.frames) >= 4  # about LIVE_FPS frames a second, not one per analysed frame
     assert mjpeg.frames[0][:2] == b"\xff\xd8"  # JPEG
+
+
+def test_live_view_draws_nothing_while_nobody_watches():
+    mjpeg = FakeMjpeg(viewers=0)
+    view = LiveView(FakeCapture(), mjpeg, zones=[]).start()
+    time.sleep(0.3)
+    view.stop()
+    assert mjpeg.frames == []  # P43: the CPU goes to the AI, not to frames nobody sees
 
 
 def test_fire_boxes_are_drawn_with_their_score():

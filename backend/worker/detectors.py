@@ -6,7 +6,9 @@ worker process, and one warm-up frame runs before the first real frame.
 
 import logging
 import math
+import os
 import shutil
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -69,17 +71,55 @@ def ensure_model_file(model_path: str) -> Path:
     return path
 
 
-def load_model(model_path: str, task: str) -> YOLO:
-    """Load weights once. Prefer the OpenVINO export next to them if it exists (same results, faster on Intel).
+EXPORT_WAIT_S = 300.0  # another camera is making the same OpenVINO copy: wait this long for it at most
 
-    Make the export with:  yolo export model=models/yolo11n-pose.pt format=openvino imgsz=480
-    """
+
+def openvino_copy(weights: Path, imgsz: int) -> Path | None:
+    """The OpenVINO copy of these weights, made once if it is missing (P43).
+
+    On an Intel CPU the OpenVINO copy is several times faster than the PyTorch weights; with three cameras the
+    PyTorch person model alone took 1 to 3 s per frame (0.3 analysed fps) against about 0.1 s with OpenVINO.
+    Several cameras starting together: the first makes the copy (about 20 s), the others wait for it.
+    Returns None when it cannot be made (the caller then uses the PyTorch weights and says so)."""
+    target = weights.with_name(f"{weights.stem}_openvino_model")
+    if target.is_dir():
+        return target
+    lock = weights.with_name(f".{weights.stem}.exporting")
+    try:
+        if time.time() - lock.stat().st_mtime > EXPORT_WAIT_S:
+            lock.unlink(missing_ok=True)  # left by a worker that died while exporting
+    except FileNotFoundError:
+        pass
+    try:
+        fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:  # another worker is exporting: wait for its result
+        deadline = time.monotonic() + EXPORT_WAIT_S
+        while time.monotonic() < deadline and lock.exists() and not target.is_dir():
+            time.sleep(1.0)
+        return target if target.is_dir() else None
+    os.close(fd)
+    try:
+        log.warning("no OpenVINO copy of %s: making it now (once, about 20 s) for faster detection", weights.name)
+        YOLO(str(weights)).export(format="openvino", imgsz=imgsz, verbose=False)
+        return target if target.is_dir() else None
+    except Exception:
+        log.exception("could not make the OpenVINO copy of %s; using the slower PyTorch weights", weights.name)
+        return None
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def load_model(model_path: str, task: str) -> YOLO:
+    """Load weights once. Prefer the OpenVINO copy next to them (same results, much faster on Intel), and make
+    that copy the first time if it is missing (P43)."""
     weights = ensure_model_file(model_path)
-    openvino_dir = weights.with_name(f"{weights.stem}_openvino_model")
-    if get_settings().prefer_openvino and openvino_dir.is_dir():
-        log.info("using OpenVINO model %s", openvino_dir.name)
-        return YOLO(str(openvino_dir), task=task)
-    log.info("using PyTorch model %s (export to OpenVINO for about 2x speed)", weights.name)
+    settings = get_settings()
+    if settings.prefer_openvino:
+        openvino_dir = openvino_copy(weights, settings.detect_imgsz)
+        if openvino_dir is not None:
+            log.info("using OpenVINO model %s", openvino_dir.name)
+            return YOLO(str(openvino_dir), task=task)
+    log.warning("using the slow PyTorch model %s (OpenVINO copy missing)", weights.name)
     return YOLO(str(weights), task=task)
 
 

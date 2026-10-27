@@ -165,7 +165,8 @@ def draw_things(image: np.ndarray, things: list[DetectionObs]) -> np.ndarray:
 
 
 class LiveView:
-    """Publishes the newest camera frame LIVE_FPS times a second with the last analysis drawn on it."""
+    """Publishes the newest camera frame LIVE_FPS times a second with the last analysis drawn on it, only while
+    someone is watching the stream (drawing and JPEG-encoding 25 frames a second costs CPU the AI needs)."""
 
     def __init__(self, capture: LatestFrameCapture, mjpeg: MjpegServer, zones: list[ZoneDef]) -> None:
         self.capture, self.mjpeg = capture, mjpeg
@@ -185,6 +186,8 @@ class LiveView:
     def _run(self) -> None:
         last_id = -1
         while not self._stop.wait(1.0 / LIVE_FPS):
+            if self.mjpeg.viewers == 0:  # nobody watching this camera: no drawing or encoding (P43)
+                continue
             frame = self.capture.latest()
             if frame is None or frame.frame_id == last_id:
                 continue
@@ -234,6 +237,9 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
     # a bare head counts as "no helmet", so the helmet model runs only on the gate cameras listed in HELMET_CAMERAS
     helmet_detector = (optional_detector(settings.helmet_model_path, settings.detect_imgsz, settings.detect_conf,
                                          "rider helmet") if helmet_camera(camera.id, settings.helmet_cameras) else None)
+    if helmet_detector is not None and not settings.helmet_cameras.strip():
+        print(f"[{camera.id}] the rider-helmet model runs on EVERY camera: set HELMET_CAMERAS to your gate "
+              "camera(s) so the other cameras detect faster", flush=True)
     for extra in (ppe_detector, fire_detector, helmet_detector):
         if extra is not None:
             extra.warm_up()

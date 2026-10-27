@@ -16,6 +16,7 @@ class MjpegServer:
         self._cond = threading.Condition()
         self._jpeg: bytes | None = None
         self._frame_no = 0
+        self.viewers = 0  # open /stream connections; the live view only draws and encodes while someone watches
         self._httpd = ThreadingHTTPServer(("127.0.0.1", port), self._handler())
 
     def start(self) -> "MjpegServer":
@@ -45,6 +46,8 @@ class MjpegServer:
                 self.send_header("Cache-Control", "no-cache")
                 self.end_headers()
                 last_sent = -1
+                with server._cond:
+                    server.viewers += 1
                 try:
                     while True:
                         with server._cond:
@@ -61,6 +64,9 @@ class MjpegServer:
                         self.wfile.flush()
                 except (BrokenPipeError, ConnectionResetError):
                     pass  # viewer closed the stream
+                finally:
+                    with server._cond:
+                        server.viewers -= 1
 
             def log_message(self, format, *args) -> None:  # keep the console quiet
                 pass
