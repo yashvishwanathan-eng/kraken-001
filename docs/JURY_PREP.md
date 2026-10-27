@@ -95,6 +95,21 @@ One laptop handles about 2 to 3 cameras at 6 to 8 analysed frames per second. Fo
 GPU box per group of cameras; they all report to the same API. Twilio places about 1 call per second, so a roll
 call of 20 guards takes about 20 seconds."
 
+### "Can you connect it to a real CCTV camera?"
+"Yes, any IP camera or NVR that gives an RTSP stream, which is almost all of them. Nothing changes in their CCTV; we
+read a copy of the stream."
+1. Get the camera's RTSP address (from its web page or the installer), with a view-only account. Hikvision:
+   `rtsp://user:pass@IP:554/Streaming/Channels/102`; Dahua / CP Plus:
+   `rtsp://user:pass@IP:554/cam/realmonitor?channel=1&subtype=1` (both are the lighter sub-stream).
+2. Put the laptop on the same network as the cameras (check with `ping`).
+3. Cameras page → Add camera → paste the address → Test (it shows the picture and fps) → Save. Its worker starts by
+   itself.
+4. Draw the zones or make it a restricted area. It is live within 30 seconds, no restart.
+
+If they want to see it: open Cameras → Add camera and show the Test button with your phone's address. Be honest:
+automatic camera discovery (ONVIF) is not built yet; today the address is pasted once per camera. Scaling: 2–3
+cameras per laptop, a small PC per 3–4 cameras, or one GPU server for 20+.
+
 ### "What if the internet or Twilio is down?"
 "The dashboard and the alarm sound still work on the local network. Every Twilio, WhatsApp and Groq call has a
 timeout and one retry; if Twilio fails, the dashboard and WhatsApp still alert, and the Calls light at the top
