@@ -83,3 +83,16 @@ def test_pretend_calls_are_reported_as_a_problem(monkeypatch, roster, capsys):
     assert check_twilio.main() == 1
     out = capsys.readouterr().out
     assert "calls are not real: CALLS_MODE=simulate" in out and "Windows environment variable" in out
+
+
+def test_fast_replies_speak_new_sentences_at_once(monkeypatch, tmp_path):
+    from app.services import call_voice
+
+    s = get_settings()
+    monkeypatch.setattr(s, "call_reply_voice", "fast")
+    monkeypatch.setattr(call_voice, "media_root", lambda: tmp_path)
+    monkeypatch.setattr(call_voice, "audio_link", lambda text, style="calm": "https://x/tts.wav")
+    new = call_voice.speech("Where exactly is the smoke?")
+    assert new.startswith("<Say voice=") and "Polly.Kajal-Neural" in new  # no wait for Rumik
+    (tmp_path / call_voice.file_name("Go, Ravi!")).write_bytes(b"wav")
+    assert call_voice.speech("Go, Ravi!").startswith("<Play>")  # made in advance: still the Rumik voice

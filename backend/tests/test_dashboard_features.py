@@ -409,3 +409,17 @@ def test_edit_a_camera_and_reseed_keeps_the_edit(roster, fake_workers):
     roster.expire_all()
     again = roster.get(Camera, camera.id)
     assert (again.name, again.source) == ("Main gate", "http://192.168.137.74:8080/video")
+
+
+def test_show_me_the_fire_opens_its_camera_live(roster):
+    headers = login(client, ADMIN)
+    make_incident(roster, camera_id="cam-phone", type_="fire", severity="critical", minutes_ago=5)
+    make_incident(roster, camera_id="cam-webcam", type_="access", minutes_ago=1)
+    out = client.post("/assistant/command", json={"text": "show me the fire"}, headers=headers).json()
+    assert out["intent"] == "show_camera" and out["data"]["camera_ids"] == ["cam-phone"]
+    assert out["answer"].startswith("Showing") and "fire" in out["answer"]
+    latest = client.post("/assistant/command", json={"text": "show the incident live"}, headers=headers).json()
+    assert latest["data"]["camera_ids"] == ["cam-webcam"]  # the newest open one
+    recording = client.post("/assistant/command", json={"text": "show the recording of the fire"},
+                            headers=headers).json()
+    assert recording["intent"] == "show_recording"  # recordings still go to the recordings

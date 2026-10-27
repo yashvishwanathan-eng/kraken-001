@@ -67,9 +67,17 @@ def prepare(text: str, style: str = "calm") -> None:
         threading.Thread(target=audio_link, args=(text, style), name="call-voice", daemon=True).start()
 
 
+def fast_replies() -> bool:
+    return get_settings().call_reply_voice == "fast"
+
+
 def speech(text: str, style: str = "calm") -> str:
-    """TwiML that speaks this text: Rumik when possible (calm or urgent), else Twilio's <Say>."""
+    """TwiML that speaks this text: Rumik when possible (calm or urgent), else Twilio's <Say>. With
+    CALL_REPLY_VOICE=fast a sentence not made yet is spoken by Twilio's voice at once instead of waiting for Rumik."""
+    s = get_settings()
+    if fast_replies() and not (media_root() / file_name(text, style)).exists():
+        return f"<Say voice={quoteattr(s.call_say_voice)} language={quoteattr(s.call_language)}>{escape(text)}</Say>"
     link = audio_link(text, style)
     if link:
         return f"<Play>{escape(link)}</Play>"
-    return f"<Say language={quoteattr(get_settings().call_language)}>{escape(text)}</Say>"
+    return f"<Say language={quoteattr(s.call_language)}>{escape(text)}</Say>"

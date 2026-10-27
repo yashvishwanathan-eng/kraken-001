@@ -100,6 +100,10 @@ class Settings(BaseSettings):
     call_style: str = "conversation"  # conversation: Friday talks and listens (LLM); menu: the old keypad menu
     call_record: bool = True  # Twilio records each call; the audio is kept on the laptop with the conversation
     call_voice: str = "rumik"  # rumik: phone calls speak in Friday's Rumik voice (falls back to twilio); twilio
+    # fast: her answers made during a call use Twilio's Indian English voice at once (no 1-2 s wait for Rumik);
+    # fixed sentences made in advance (opening, "one second", "Go, Ravi!") stay in the Rumik voice
+    call_reply_voice: str = "rumik"
+    call_say_voice: str = "Polly.Kajal-Neural"  # Twilio voice for fast answers (Amazon Polly, Indian English)
     no_answer_alert_all_s: float = 45.0  # critical/high: nobody acknowledged by then -> alert every guard on shift
     stream_token_ttl_s: int = 3600
     api_base_url: str = "http://127.0.0.1:8000"  # where workers send /internal calls

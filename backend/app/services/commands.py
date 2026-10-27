@@ -60,6 +60,9 @@ PATTERNS: list[tuple[str, re.Pattern]] = [(intent, re.compile(p)) for intent, p 
     ("status_report", r"\bstatus( report)?\b"),
     ("show_recording", r"\b(show|open|play|pull up|find)\b.*\b(recordings?|videos?|footage|clips?)\b"),
     ("show_camera", r"\b(show|open|display) (me )?(the )?cam(era)?s?\s*(?P<camera>[\w-]+((\s*(,|and|&)\s*)+[\w-]+)*)"),
+    # "show me the fire", "show the incident live", "open the restricted area feed": that camera, live, at once
+    ("show_live", r"\b(show|open|display)\b(?!.*\b(recordings?|videos?|footage|clips?)\b).*"
+                  r"\b(live|feed|fire|smoke|incident|intruder|restricted|fall|alarm|alert|problem|emergency)\b"),
     ("ack", r"\b(ack|acknowledge)\b"),
     ("resolve", r"\b(resolve|close)\b"),
     ("call_zone", r"\bcall (the )?zone (?P<zone>[\w -]+)"),
@@ -264,6 +267,9 @@ def execute(intent: str, args: dict, user: User, text: str) -> CommandResult:
     if intent == "summary":
         return _summary(args, user, text)
 
+    if intent == "show_live":
+        return _show_live(user, text)
+
     if intent == "show_recording":
         return _show_recording(args, user, text)
 
@@ -354,6 +360,36 @@ RECORDING_TYPES = {"fire": "fire", "smoke": "smoke", "rider": "no_helmet", "with
                    "no helmet": "no_helmet", "fall": "fall", "fell": "fall", "bag": "unattended",
                    "restricted": "access", "intruder": "access", "entry": "access", "crowd": "crowding",
                    "helmet": "ppe", "vest": "ppe", "ppe": "ppe", "loiter": "loitering"}
+
+
+def _show_live(user: User, text: str) -> CommandResult:
+    """ "Show me the fire" / "show the incident live": the camera of the latest such incident (an open one first),
+    on the Live page at once (answered as show_camera, so dashboards switch the way they do for "show camera 2")."""
+    lowered = text.lower()
+    kind = next((t for word, t in RECORDING_TYPES.items() if word in lowered), None)
+    number = m.group(1) if (m := re.search(r"incident (?:number )?(\d+)", lowered)) else None
+    scope = allowed_cameras(user)
+    with SessionLocal() as db:
+        query = select(Incident)
+        if number:
+            query = query.where(Incident.id == int(number))
+        elif kind:
+            query = query.where(Incident.type == kind)
+        if scope is not None:
+            query = query.where(Incident.camera_id.in_(scope))
+        # the newest still-open incident first, else the newest of all
+        incident = (db.scalars(query.where(Incident.status.not_in(("resolved", "false_alarm"))).order_by(Incident.started_at.desc())
+                               .limit(1)).first()
+                    or db.scalars(query.order_by(Incident.started_at.desc()).limit(1)).first())
+        if incident is None:
+            return CommandResult("show_camera", "refused", "There's no incident like that to show.")
+        camera_name = incident.camera.name if incident.camera else incident.camera_id
+        label = TYPE_LABELS.get(incident.type, incident.type).lower()
+        when = local_time_text(incident.started_at, get_settings().timezone)
+        return CommandResult("show_camera", "done",
+                             f"Showing {camera_name} live: {label} at {when}, {incident.status}.",
+                             data={"camera_id": incident.camera_id, "camera_ids": [incident.camera_id],
+                                   "incident_id": incident.id})
 
 
 def _show_recording(args: dict, user: User, text: str) -> CommandResult:

@@ -340,6 +340,7 @@ async def gather_webhook(request: Request, call_id: int, step: str = "") -> Resp
 # listen again ... silence -> "are you there?" once, then goodbye. Keypresses still work: 1 going, and so on.
 
 TALK_WAIT_S = 1.2  # answer straight away when it is ready this fast (keypad, no Rumik); else play a filler
+TALK_WAIT_FAST_S = 2.5  # fast replies only wait for the LLM: waiting a bit longer beats a filler + a round trip
 NEXT_WAIT_S = 10.0
 
 
@@ -488,8 +489,8 @@ def _think(call_id: int, said: str, digits: str) -> None:
         conversations.call_turn(call_id, "person", said or f"(pressed {digits[:1]})")
         turn = call_agent.decide(conv, said, digits)
         turn = _carry_out(call_id, conv, turn, said, "keypad" if digits else "voice")
-        # her answer in the Rumik voice, made now while the filler plays
-        call_voice.audio_link(turn.reply, call_agent.style_for(conv.kind, conv.severity))
+        if not call_voice.fast_replies():  # her answer in the Rumik voice, made now while the filler plays
+            call_voice.audio_link(turn.reply, call_agent.style_for(conv.kind, conv.severity))
         conversations.call_turn(call_id, "friday", turn.reply,
                                 None if turn.action in ("none", "connect") else turn.action)
     except Exception:
@@ -520,7 +521,8 @@ async def talk(request: Request, call_id: int) -> Response:
     conv.ready.clear()
     conv.pending = None
     threading.Thread(target=_think, args=(call_id, said, digits), name=f"call-{call_id}", daemon=True).start()
-    if await run_in_threadpool(conv.ready.wait, TALK_WAIT_S):
+    wait = TALK_WAIT_FAST_S if call_voice.fast_replies() else TALK_WAIT_S
+    if await run_in_threadpool(conv.ready.wait, wait):
         return await run_in_threadpool(_answer, call_id, conv.pending)
     filler = call_agent.FILLERS[conv.turns % len(call_agent.FILLERS)]
     style = call_agent.style_for(conv.kind, conv.severity)
