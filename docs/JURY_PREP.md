@@ -9,15 +9,15 @@ questions they are most likely to ask and what to say, Part 4 what to be honest 
 
 1. Laptop on the charger, Windows power mode **Best performance**, notifications off.
 2. In VS Code, open these files as tabs **in this order** (left to right), so you just click through:
-   1. `docs/READ_FIRST.md` (the system in plain words)
-   2. `backend/worker/capture.py`
-   3. `backend/worker/run_worker.py`
-   4. `backend/worker/rules.py`
-   5. `backend/app/services/escalation.py`
-   6. `backend/app/services/call_agent.py`
-   7. `backend/app/services/faces.py`
-   8. `backend/app/services/assistant.py`
-   9. `docs/CONTRACT.md` and `docs/disclosures.md`
+    1. `docs/READ_FIRST.md` (the system in plain words)
+    2. `backend/worker/capture.py`
+    3. `backend/worker/run_worker.py`
+    4. `backend/worker/rules.py`
+    5. `backend/app/services/escalation.py`
+    6. `backend/app/services/call_agent.py`
+    7. `backend/app/services/faces.py`
+    8. `backend/app/services/assistant.py`
+    9. `docs/CONTRACT.md` and `docs/disclosures.md`
 3. One terminal in `backend\` with the venv on, ready to type `pytest -q`.
 4. The website open on **Live Feed**, one camera running, **Demo alert** visible.
 5. `CALLS_MODE=live` only if your phone is on you and the numbers on the call list belong to your team.
