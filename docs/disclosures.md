@@ -10,7 +10,9 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - Llama 3.2 3B (`llama3.2:3b`, Meta, Llama 3.2 Community License), run locally by Ollama: offline fallback for the assistant.
 - Whisper "small" (OpenAI, MIT) in the faster-whisper format (`Systran/faster-whisper-small`, MIT), downloaded on first offline use: offline speech to text.
 - Groq-hosted models (chosen in `.env`: `GROQ_MODEL` for questions/commands, `GROQ_STT_MODEL` for speech): fill in the exact model names and their licences once chosen.
-- PPE and fire/smoke models: chosen 26 Oct, training guide in `backend/tools/vision_training/README.md` (YOLO11n fine-tuned on Colab; Construction-PPE and D-Fire datasets, licences listed there). Move the lines here once trained.
+- PPE model (`models/ppe.pt`): YOLO11n fine-tuned on Google Colab (free T4 GPU) on the Ultralytics Construction-PPE dataset (licence on its page). Validation mAP50: helmet 0.83, vest 0.83.
+- Fire/smoke model (`models/fire_smoke_v2.pt`): YOLO11n fine-tuned on Colab on the D-Fire dataset (Venâncio, Lisboa, Barbosa, 2022; Roboflow Universe copy listed as CC BY 4.0), plus about 200 of our own lighter photos and no-flame photos filmed with our webcam. The lighter photos were boxed with Roboflow's Auto Label (it used the Gemini-based model Roboflow offered) and checked by hand. Validation mAP50: all 0.66 (fire 0.59, smoke 0.73) on the D-Fire validation images.
+- Roboflow (cloud): dataset hosting, versions and Auto Label. Only training photos were uploaded there, never live video. Some of those photos show team members' faces.
 
 ## Test data
 - `bus.jpg` sample image shipped inside the Ultralytics package (AGPL-3.0): converted to a short local test video to check detection. The video is not committed.
@@ -81,3 +83,8 @@ Every model, dataset, library and external API used in SafetyAI is listed here (
 - Vosk 0.3.45 (Apache-2.0) with the `vosk-model-small-en-in-0.4` Indian English model (Apache-2.0, from alphacephei.com, downloaded once): offline "Hey Friday" detection with a two-word grammar, used until/unless the trained model file exists. Runs on the laptop; audio never leaves it.
 - Google Colab (free T4 GPU) runs openWakeWord's `automatic_model_training.ipynb` to train `hey_friday.onnx` (guide: `backend/tools/wake_training/README.md`). Training data: synthetic "hey friday" clips from piper-sample-generator (LibriTTS-R voice model) mixed with AudioSet, Free Music Archive and ACAV100M background audio/features; their own licences apply. No recordings of real people are used.
 - Browser text to speech (Web Speech API, voices installed on the laptop): Friday's fallback voice when Rumik is not set up or does not answer; a female voice (e.g. Microsoft Heera or Zira) is picked by name.
+
+## Tools used to build the project
+- Claude Code (Anthropic) was used as an AI coding assistant throughout the build: it wrote and changed code, tests and documents on our instructions, and we reviewed, ran and tested the results on our laptop.
+- Google Antigravity (an AI code editor with Gemini) was used for some edits to the `.env` files and for running commands.
+- Google Colab (free T4 GPU) for training the vision models and the wake word.
