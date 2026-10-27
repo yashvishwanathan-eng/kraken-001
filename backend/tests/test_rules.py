@@ -66,17 +66,17 @@ def test_night_window_crosses_midnight():
 
 # ---------- access ----------
 
-def test_access_fires_after_three_seconds_in_restricted_zone():
+def test_access_fires_after_one_and_a_half_seconds_in_restricted_zone():
     fired = run(engine(RESTRICTED), [(t, [person(1, IN_RESTRICTED)], None) for t in every(0.3, 0, 5)])
     assert len(fired) == 1
     t, c = fired[0]
     assert c.type == "access" and c.severity == "high" and c.zone == "server-room-door"
-    assert 3.0 <= t < 3.4
+    assert 1.5 <= t < 1.9  # ACCESS_DWELL_S (P41: 1.5 s)
 
 
 def test_access_does_not_fire_for_short_visit():
-    frames = [(t, [person(1, IN_RESTRICTED)], None) for t in every(0.3, 0, 2.4)]
-    frames += [(t, [], None) for t in every(0.3, 2.7, 6)]
+    frames = [(t, [person(1, IN_RESTRICTED)], None) for t in every(0.3, 0, 1.2)]
+    frames += [(t, [], None) for t in every(0.3, 1.5, 6)]
     assert run(engine(RESTRICTED), frames) == []
 
 

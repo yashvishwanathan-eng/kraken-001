@@ -168,10 +168,10 @@ class Settings(BaseSettings):
     no_helmet_labels: str = "without helmet,without_helmet,no helmet,no-helmet,no_helmet,nohelmet,without-helmet"
     fire_conf: float = 0.4  # flames: lower than DETECT_CONF so a lighter's small flame still counts
     smoke_conf: float = 0.5  # smoke: thin indoor smoke (incense) scores lower than a big plume; 0.3 to 0.4 for it
-    smoke_frames: int = 5
+    smoke_frames: int = 3  # P41: 3 of the last 6 analysed frames (the picture check stops look-alikes)
     no_helmet_frames: int = 4
     ppe_missing_frames: int = 10
-    fire_frames: int = 5
+    fire_frames: int = 3  # P41: 3 of the last 6 analysed frames
     # P40: a fire or smoke box must also look like fire or smoke in the picture (worker/verify.py), so a face,
     # a lamp or a grey wall the model mistakes never raises an alarm. Fractions of the box's pixels.
     fire_colour_min: float = 0.03  # bright red/orange/yellow flame pixels
@@ -182,7 +182,7 @@ class Settings(BaseSettings):
 
     # incident rule thresholds (CLAUDE.md "Incident rules")
     incident_cooldown_s: float = 60.0
-    access_dwell_s: float = 3.0
+    access_dwell_s: float = 1.5  # P41: feet in a restricted zone this long (was 3 s)
     loiter_s: float = 120.0
     fall_angle_deg: float = 60.0  # torso this far from vertical counts as "near-horizontal"
     upright_angle_deg: float = 30.0  # below this the person is upright; used to learn hip height

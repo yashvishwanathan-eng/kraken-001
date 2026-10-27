@@ -45,10 +45,10 @@ def test_ppe_model_not_run_leaves_the_count_alone():
     assert [i for i, _ in fired] == [14]  # 10th frame where the model actually looked
 
 
-def test_fire_in_five_frames_in_a_row():
+def test_fire_in_three_frames_in_a_row():
     engine = RulesEngine([], RuleConfig())
     fired = feed(engine, [{"fire": [FIRE]}] * 6)
-    assert [(i, c.type, c.severity) for i, c in fired] == [(4, "fire", "critical")]
+    assert [(i, c.type, c.severity) for i, c in fired] == [(2, "fire", "critical")]  # P41: 3 frames
 
 
 def test_a_flame_seen_now_and_then_is_not_a_fire_but_a_flickering_one_is():

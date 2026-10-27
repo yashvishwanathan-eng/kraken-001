@@ -7,7 +7,7 @@ from app.config import get_settings
 from app.main import app
 from app.models import Call, Conversation, Incident, Responder, RollCall
 from app.routers import twilio as twilio_router
-from app.services import call_agent, tts
+from app.services import call_agent, call_voice, tts
 from tests.conftest import make_incident, twilio_post
 
 client = TestClient(app)
@@ -162,11 +162,16 @@ def test_calls_speak_in_the_rumik_voice_made_once(roster, talk, monkeypatch, tmp
     monkeypatch.setattr(s, "rumik_gateway_url", "https://rumik.example")
     monkeypatch.setattr(s, "media_dir", str(tmp_path))
     monkeypatch.setattr(tts, "speak", speak)
+    asked = []  # the background job: record what it was asked to make, make it after the first answer
+    monkeypatch.setattr(call_voice, "prepare", lambda text, style="calm": asked.append((text, style)))
     call_id = a_call(roster, incident_id=make_incident(roster, type_="fire", severity="critical"))
     first = twilio_post(client, f"/twilio/voice?call_id={call_id}", {}).text
-    assert "<Play>" in first and "<Say" not in first and "/share/media/tts_" in first
+    assert "<Say" in first and made == []  # P41: not made yet -> spoken at once, never a silent wait
+    for text, style in asked:
+        call_voice.audio_link(text, style)  # the background job finishes
     call_agent._calls.clear()
-    twilio_post(client, f"/twilio/voice?call_id={call_id}", {})
+    second = twilio_post(client, f"/twilio/voice?call_id={call_id}", {}).text
+    assert "<Play>" in second and "/share/media/tts_" in second
     assert len(made) == 1 and made[0][1] == "urgent"  # made once, reused; a fire call sounds urgent
 
 

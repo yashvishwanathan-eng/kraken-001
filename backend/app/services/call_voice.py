@@ -22,6 +22,7 @@ from app.services.permissions import share_url
 log = logging.getLogger("safetyai.call_voice")
 
 RETRY_AFTER_S = 60.0
+READY_WAIT_S = 0.8  # longest a caller waits for a sentence that is still being made in the Rumik voice
 _locks: dict[str, threading.Lock] = {}
 _locks_guard = threading.Lock()
 _failed_at = float("-inf")
@@ -72,12 +73,25 @@ def fast_replies() -> bool:
 
 
 def speech(text: str, style: str = "calm") -> str:
-    """TwiML that speaks this text: Rumik when possible (calm or urgent), else Twilio's <Say>. With
-    CALL_REPLY_VOICE=fast a sentence not made yet is spoken by Twilio's voice at once instead of waiting for Rumik."""
+    """TwiML that speaks this text at once: the Rumik file when it is ready, else Twilio's voice.
+
+    Never makes the person on the phone wait for Rumik (P41): a sentence still being made (the opening is made
+    while the phone rings) gets up to READY_WAIT_S; a sentence not made at all is spoken by Twilio's voice now
+    and made in the background, so it is ready the next time it is needed."""
     s = get_settings()
-    if fast_replies() and not (media_root() / file_name(text, style)).exists():
+    name = file_name(text, style)
+    path = media_root() / name
+    if not path.exists() and enabled() and time.monotonic() - _failed_at >= RETRY_AFTER_S:
+        with _locks_guard:
+            lock = _locks.get(name)
+        if lock is not None and lock.acquire(timeout=READY_WAIT_S):  # being made right now: a short wait at most
+            lock.release()
+        if not path.exists():
+            prepare(text, style)
+    if path.exists():
+        link = audio_link(text, style)
+        if link:
+            return f"<Play>{escape(link)}</Play>"
+    if fast_replies() or enabled():  # Twilio's Indian English voice, closest to Friday's
         return f"<Say voice={quoteattr(s.call_say_voice)} language={quoteattr(s.call_language)}>{escape(text)}</Say>"
-    link = audio_link(text, style)
-    if link:
-        return f"<Play>{escape(link)}</Play>"
     return f"<Say language={quoteattr(s.call_language)}>{escape(text)}</Say>"

@@ -72,7 +72,7 @@ class Candidate:
 class RuleConfig:
     cooldown_s: float = 60.0
     rearm_quiet_s: float = 20.0  # after an alarm, that type re-arms only once it has not been seen for this long
-    access_dwell_s: float = 3.0
+    access_dwell_s: float = 1.5
     loiter_s: float = 120.0
     fall_angle_deg: float = 60.0
     upright_angle_deg: float = 30.0
@@ -83,8 +83,8 @@ class RuleConfig:
     bag_reach_frac: float = 0.15
     track_grace_s: float = 1.0
     ppe_missing_frames: int = 10
-    fire_frames: int = 5
-    smoke_frames: int = 5
+    fire_frames: int = 3
+    smoke_frames: int = 3
     no_helmet_frames: int = 4
     extra_model_conf: float = 0.5
     fire_conf: float = 0.35  # a lighter's small flame scores lower than a big fire
