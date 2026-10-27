@@ -34,6 +34,7 @@ from worker.incidents import IncidentReporter
 from worker.mjpeg import MjpegServer
 from worker.recorder import ContinuousRecorder
 from worker.rules import BagObs, DetectionObs, PersonObs, RuleConfig, RulesEngine, ZoneDef, point_in_polygon
+from worker.verify import verify_fire_smoke
 
 REPORT_EVERY_S = 5.0
 ZONE_REFRESH_S = 30.0
@@ -239,7 +240,12 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
 
     zones = load_zones(camera.id) or []
     faces_on = start_faces(camera.id, zones) if settings.face_enabled else None
-    engine = RulesEngine(zones, RuleConfig.from_settings(settings))
+    rule_cfg = RuleConfig.from_settings(settings)
+    engine = RulesEngine(zones, rule_cfg)
+    fire_labels, smoke_labels = rule_cfg.fire_labels, rule_cfg.smoke_labels
+    if settings.fire_frames < rule_cfg.fire_frames or settings.smoke_frames < rule_cfg.smoke_frames:
+        print(f"[{camera.id}] FIRE_FRAMES/SMOKE_FRAMES below 3 raised to 3: one or two odd frames never alarm",
+              flush=True)
     ring = RingBuffer(settings.ring_buffer_s, settings.ring_max_width)
     reporter = IncidentReporter(camera.id, settings, ring)
     mjpeg = MjpegServer(camera.port).start()
@@ -304,6 +310,9 @@ def run(camera_id: str, max_seconds: float, source_override: str | None) -> int:
                 timings["ppe"], t1 = (time.perf_counter() - t1) * 1000, time.perf_counter()
             if fire_detector is not None:
                 fire = [DetectionObs(d.xyxy, d.label, d.confidence) for d in fire_detector.detect(keyframe.image)]
+                if settings.verify_fire and fire:  # P40: the box must also look like flames / smoke in the picture
+                    fire = verify_fire_smoke(keyframe.image, fire, [p.xyxy for p in people], fire_labels,
+                                             smoke_labels, settings.fire_colour_min, settings.smoke_colour_min)
                 timings["fire"], t1 = (time.perf_counter() - t1) * 1000, time.perf_counter()
             riders = None
             if helmet_detector is not None:

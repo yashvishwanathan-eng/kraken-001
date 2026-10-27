@@ -21,6 +21,7 @@ import queue
 import threading
 import time
 from collections.abc import Callable
+from datetime import datetime, timedelta, timezone
 from xml.sax.saxutils import escape, quoteattr
 
 import httpx
@@ -28,7 +29,7 @@ from sqlalchemy import select
 
 from app.config import PRODUCT_NAME, Settings, get_settings
 from app.db import SessionLocal
-from app.models import Call
+from app.models import Call, Incident
 from app.services import incidents as incident_ops
 from app.ws import manager
 
@@ -148,6 +149,10 @@ class CallService:
         if mode == "off":
             log.info("calls off: not calling %s (incident=%s kind=%s)", to_name, incident_id, kind)
             return None
+        if kind == "alert" and incident_id is not None and self._called_recently(to_phone, incident_id):
+            log.info("not calling %s again: already alerted about this camera in the last %.0f s (incident=%s)",
+                     to_name, self.settings.call_person_gap_s, incident_id)
+            return None
         with SessionLocal() as db:
             call = Call(kind=kind, to_name=to_name, to_phone=to_phone, responder_id=responder_id,
                         incident_id=incident_id, roll_call_id=roll_call_id, message=message,
@@ -162,6 +167,17 @@ class CallService:
             log.info("call=%d simulated: would call %s (%s) kind=%s", call_id, to_name, to_phone, kind)
             self._after_placed(call_id)
         return call_id
+
+    def _called_recently(self, to_phone: str, incident_id: int) -> bool:
+        """P40: this phone already got an alert call about the same camera within CALL_PERSON_GAP_S."""
+        since = datetime.now(timezone.utc) - timedelta(seconds=self.settings.call_person_gap_s)
+        with SessionLocal() as db:
+            camera_id = db.scalar(select(Incident.camera_id).where(Incident.id == incident_id))
+            if camera_id is None:
+                return False
+            return db.scalar(select(Call.id).join(Incident, Call.incident_id == Incident.id).where(
+                Call.kind == "alert", Call.to_phone == to_phone, Call.created_at >= since,
+                Incident.camera_id == camera_id, Call.status != "canceled").limit(1)) is not None
 
     def cancel_pending(self, incident_id: int | None = None) -> int:
         """Stop calls that have not been dialled yet (all, or one incident's). Returns how many."""

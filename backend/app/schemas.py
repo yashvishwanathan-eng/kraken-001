@@ -24,7 +24,7 @@ Status = Literal["open", "acknowledged", "resolved", "false_alarm"]
 TimelineAction = Literal[
     "detected", "call_placed", "call_no_answer", "acknowledged", "escalated", "whatsapp_sent", "resolved",
     "false_alarm", "roll_call_responded", "roll_call_safe", "alert_all", "command", "duty_fallback",
-    "call_skipped_on_screen", "nobody_answered",
+    "call_skipped_on_screen", "nobody_answered", "repeat_of",
 ]
 Via = Literal["keypad", "voice", "dashboard"]
 

@@ -100,10 +100,18 @@ def test_brief_track_loss_within_grace_keeps_the_timer():
 # ---------- cooldown ----------
 
 def test_cooldown_stops_repeat_incidents():
-    fired = run(engine(RESTRICTED), [(t, [person(1, IN_RESTRICTED)], None) for t in every(0.5, 0, 70)])
-    times = [t for t, _ in fired]
-    assert len(times) == 2
-    assert times[1] - times[0] >= 60
+    """P40: someone who stays in the zone is one alarm, however long they stay."""
+    fired = run(engine(RESTRICTED), [(t, [person(1, IN_RESTRICTED)], None) for t in every(0.5, 0, 200)])
+    assert len([c for _, c in fired if c.type == "access"]) == 1
+
+
+def test_a_new_entry_after_leaving_alarms_again():
+    """Left for longer than REARM_QUIET_S (20 s) and the cooldown (60 s) passed: a new entry is a new alarm."""
+    frames = ([(t, [person(1, IN_RESTRICTED)], None) for t in every(0.5, 0, 10)]
+              + [(t, [], None) for t in every(0.5, 10, 70)]
+              + [(t, [person(2, IN_RESTRICTED)], None) for t in every(0.5, 70, 80)])
+    times = [t for t, _ in run(engine(RESTRICTED), frames)]
+    assert len(times) == 2 and times[1] - times[0] >= 60
 
 
 # ---------- loitering ----------

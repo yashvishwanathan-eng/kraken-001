@@ -26,6 +26,8 @@ os.environ["DATABASE_URL"] = _test_database_url()
 # Tests use a frozen copy of the demo config, so editing config/*.yaml for the demo never breaks them.
 FIXTURES = BACKEND_DIR / "tests" / "fixtures"
 os.environ["CAMERA_CONFIG_PATH"] = str(FIXTURES / "cameras.yaml")
+# the ladder tests use every incident type; the P40 default (fire, smoke, access only) has its own tests
+os.environ["CALL_TYPES"] = "fire,smoke,access,fall,unattended,crowding,ppe,loitering,no_helmet"
 
 
 @pytest.fixture(scope="session")

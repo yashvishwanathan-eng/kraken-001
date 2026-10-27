@@ -13,6 +13,12 @@ Low (ppe, loitering):
     0 s   WhatsApp the zone manager; no calls
     and if the same zone has 3 low incidents within 1 hour, call the Head Guard once
 
+Who may be called (P40): only incident types in CALL_TYPES (fire, smoke, restricted entry) ring a phone.
+Every other type (fall, bag, crowding, PPE, loitering, ...) shows on the dashboard and goes to WhatsApp only.
+One emergency, one ladder (P40): a new incident of the same kind on the same camera while an earlier one from
+the last REPEAT_WINDOW_S is still open or acknowledged is the same emergency (fire and smoke count as one kind):
+it appears on the dashboard with "repeat_of" on its timeline but calls and messages nobody again.
+
 Duty (P23): Head Guards and Guards are called only while checked in on duty. If nobody of that role is on
 duty, the shift roster is called instead, the timeline gets "duty_fallback" and the Head Guards are told
 on WhatsApp once per incident, so nothing is silently dropped.
@@ -61,7 +67,21 @@ class Step:
     defer_on_screen: bool = False  # the target has a dashboard open: wait ONSCREEN_GRACE_S before calling
 
 
+def call_types(s: Settings) -> set[str]:
+    return {t.strip() for t in s.call_types.split(",") if t.strip()}
+
+
+FAMILY = {"smoke": "fire"}  # one emergency: smoke next to a fire is the same event
+
+
+def same_kind(kind: str) -> list[str]:
+    family = FAMILY.get(kind, kind)
+    return sorted({family} | {k for k, v in FAMILY.items() if v == family})
+
+
 def ladder_for(severity: str, s: Settings, kind: str | None = None) -> list[Step]:
+    if kind is not None and kind not in call_types(s):  # P40: this type never rings a phone
+        return [Step(0, "whatsapp", "zone_manager" if severity == "low" else "admin")]
     if kind == "no_helmet":  # a rider without a helmet at a gate: just the guard of that gate's camera, at once
         return [Step(0, "call", "gate_guard")]
     # Critical and high call the whole hierarchy; if nobody has acknowledged after NO_ANSWER_ALERT_ALL_S,
@@ -124,6 +144,14 @@ class Escalation:
             if incident is None:
                 return
             severity, kind = incident.severity, incident.type
+            earlier = self._earlier_same_emergency(db, incident)
+            if earlier is not None:
+                incident_ops.add_timeline(incident, "repeat_of", to=f"#{earlier}")
+                db.commit()
+                manager.publish_from_thread(incident_ops.to_message(incident))
+                log.info("incident=%d repeat of open incident %d on %s: no calls", incident_id, earlier,
+                         incident.camera_id)
+                return
         now = datetime.now(timezone.utc)
         for index, step in enumerate(ladder_for(severity, self.settings, kind)):
             self.scheduler.add_job(self.run_step, "date", run_date=now + timedelta(seconds=step.delay_s),
@@ -133,6 +161,15 @@ class Escalation:
             self.scheduler.add_job(self.check_low_repeat, "date", run_date=now, args=[incident_id],
                                    id=f"repeat:{incident_id}", replace_existing=True, misfire_grace_time=60)
         log.info("incident=%d step=ladder_scheduled severity=%s", incident_id, severity)
+
+    def _earlier_same_emergency(self, db, incident: Incident) -> int | None:
+        """An earlier incident of the same kind on the same camera, still open or acknowledged, from the last
+        REPEAT_WINDOW_S: the id of the newest one, else None."""
+        since = incident.started_at - timedelta(seconds=self.settings.repeat_window_s)
+        return db.scalar(select(Incident.id).where(
+            Incident.camera_id == incident.camera_id, Incident.type.in_(same_kind(incident.type)),
+            Incident.id < incident.id, Incident.status.in_(("open", "acknowledged")),
+            Incident.started_at >= since).order_by(Incident.id.desc()).limit(1))
 
     def stop(self, incident_id: int, except_call_id: int | None = None) -> None:
         """Someone acknowledged or closed it: no more calls for this incident."""
@@ -202,7 +239,10 @@ class Escalation:
             incident = incident_ops.load(db, incident_id)
             if incident is None:
                 return
-            step = ladder_for(incident.severity, self.settings, incident.type)[index]
+            steps = ladder_for(incident.severity, self.settings, incident.type)
+            if index >= len(steps):  # the settings changed since this job was scheduled
+                return
+            step = steps[index]
             if incident.status != "open":
                 log.info("incident=%d step=%d skipped: already %s", incident_id, index, incident.status)
                 if deferred:
@@ -277,7 +317,7 @@ class Escalation:
         s = self.settings
         with SessionLocal() as db:
             incident = incident_ops.load(db, incident_id)
-            if incident is None or incident.zone is None:
+            if incident is None or incident.zone is None or incident.type not in call_types(s):
                 return
             # this incident and the ones before it, within the window (never later ones)
             since = incident.started_at - timedelta(minutes=s.low_repeat_window_min)

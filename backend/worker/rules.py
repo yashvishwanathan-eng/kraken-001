@@ -20,6 +20,7 @@ BAG_IOU_MATCH = 0.3  # a new bag box overlapping an old one this much is the sam
 BAG_FORGET_S = 5.0  # forget a bag not seen for this long
 UPRIGHT_FORGET_S = 30.0  # forget a person's upright hip height after this long unseen
 STREAK_SLACK = 3  # fire, smoke, no helmet: N sightings within the last N + 3 analysed frames (5 of 8)
+MIN_CONFIRM_FRAMES = 3  # P40: fire and smoke always need at least 3 sightings; one or two odd frames never alarm
 
 
 # ---------- data in and out ----------
@@ -70,6 +71,7 @@ class Candidate:
 @dataclass(frozen=True)
 class RuleConfig:
     cooldown_s: float = 60.0
+    rearm_quiet_s: float = 20.0  # after an alarm, that type re-arms only once it has not been seen for this long
     access_dwell_s: float = 3.0
     loiter_s: float = 120.0
     fall_angle_deg: float = 60.0
@@ -100,12 +102,12 @@ class RuleConfig:
     @classmethod
     def from_settings(cls, s) -> "RuleConfig":
         return cls(
-            cooldown_s=s.incident_cooldown_s, access_dwell_s=s.access_dwell_s, loiter_s=s.loiter_s,
+            cooldown_s=s.incident_cooldown_s, rearm_quiet_s=s.rearm_quiet_s, access_dwell_s=s.access_dwell_s, loiter_s=s.loiter_s,
             fall_angle_deg=s.fall_angle_deg, upright_angle_deg=s.upright_angle_deg,
             fall_hip_drop=s.fall_hip_drop, fall_down_s=s.fall_down_s, unattended_s=s.unattended_s,
             bag_still_frac=s.bag_still_frac, bag_reach_frac=s.bag_reach_frac,
-            track_grace_s=s.track_grace_s, ppe_missing_frames=s.ppe_missing_frames, fire_frames=s.fire_frames,
-            smoke_frames=s.smoke_frames, no_helmet_frames=s.no_helmet_frames, fire_conf=s.fire_conf, smoke_conf=s.smoke_conf,
+            track_grace_s=s.track_grace_s, ppe_missing_frames=s.ppe_missing_frames,
+            fire_frames=max(s.fire_frames, MIN_CONFIRM_FRAMES), smoke_frames=max(s.smoke_frames, MIN_CONFIRM_FRAMES), no_helmet_frames=s.no_helmet_frames, fire_conf=s.fire_conf, smoke_conf=s.smoke_conf,
             extra_model_conf=s.detect_conf, helmet_labels=labels(s.ppe_helmet_labels),
             vest_labels=labels(s.ppe_vest_labels), fire_labels=labels(s.fire_labels),
             smoke_labels=labels(s.smoke_labels), no_helmet_labels=labels(s.no_helmet_labels),
@@ -217,6 +219,7 @@ class RulesEngine:
         self._upright: dict[int, tuple[float, float, float]] = {}  # track -> (hip_y, height, last_seen)
         self._bags: list[_BagState] = []
         self._last_fired: dict[str, float] = {}
+        self._last_true: dict[str, float] = {}  # type -> last analysed time its condition was true (fired or not)
         self._ppe_missing: dict[int, int] = {}  # track -> consecutive analysed frames without helmet/vest
         # the last few analysed frames for each kind: True = seen (fire flickers, so a miss does not reset the count)
         self._streaks: dict[str, deque[bool]] = {"fire": deque(), "smoke": deque(), "no_helmet": deque()}
@@ -427,12 +430,21 @@ class RulesEngine:
                             frame_w, frame_h, detections)
 
     def _apply_cooldown(self, t: float, found: list[Candidate]) -> list[Candidate]:
-        """Same camera + type cannot fire again within the cooldown. One worker = one camera."""
+        """One alarm per event. A type that fired stays quiet while its condition keeps being true (the same fire,
+        the same person still in the zone); it re-arms only after the condition has been gone for REARM_QUIET_S
+        and the cooldown has passed. One worker = one camera, so the key is the type."""
         fired = []
         for c in found:
-            last = self._last_fired.get(c.type)
-            if last is not None and t - last < self.cfg.cooldown_s:
+            if any(f.type == c.type for f in fired):
                 continue
+            last_true = self._last_true.get(c.type)
+            self._last_true[c.type] = t
+            last = self._last_fired.get(c.type)
+            if last is not None:
+                if t - last < self.cfg.cooldown_s:
+                    continue
+                if last_true is not None and t - last_true < self.cfg.rearm_quiet_s:
+                    continue  # still the same event: it never went away
             self._last_fired[c.type] = t
             fired.append(c)
         return fired

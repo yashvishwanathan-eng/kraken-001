@@ -105,6 +105,12 @@ class Settings(BaseSettings):
     call_reply_voice: str = "rumik"
     call_say_voice: str = "Polly.Kajal-Neural"  # Twilio voice for fast answers (Amazon Polly, Indian English)
     no_answer_alert_all_s: float = 45.0  # critical/high: nobody acknowledged by then -> alert every guard on shift
+    # P40: only these incident types ever ring a phone; every other type shows on the dashboard and goes to WhatsApp
+    call_types: str = "fire,smoke,access"
+    # P40: a new incident of the same kind on the same camera while an earlier one (within this window) is still
+    # open or acknowledged is the same emergency: it shows on the dashboard but calls nobody again
+    repeat_window_s: float = 600.0
+    call_person_gap_s: float = 120.0  # P40: never ring the same phone twice within this for the same camera
     stream_token_ttl_s: int = 3600
     api_base_url: str = "http://127.0.0.1:8000"  # where workers send /internal calls
     session_ttl_h: float = 12.0  # a login lasts one shift
@@ -160,12 +166,19 @@ class Settings(BaseSettings):
     fire_labels: str = "fire,flame"
     smoke_labels: str = "smoke"
     no_helmet_labels: str = "without helmet,without_helmet,no helmet,no-helmet,no_helmet,nohelmet,without-helmet"
-    fire_conf: float = 0.35  # flames: lower than DETECT_CONF so a lighter's small flame still counts
+    fire_conf: float = 0.4  # flames: lower than DETECT_CONF so a lighter's small flame still counts
     smoke_conf: float = 0.5  # smoke: thin indoor smoke (incense) scores lower than a big plume; 0.3 to 0.4 for it
     smoke_frames: int = 5
     no_helmet_frames: int = 4
     ppe_missing_frames: int = 10
     fire_frames: int = 5
+    # P40: a fire or smoke box must also look like fire or smoke in the picture (worker/verify.py), so a face,
+    # a lamp or a grey wall the model mistakes never raises an alarm. Fractions of the box's pixels.
+    fire_colour_min: float = 0.03  # bright red/orange/yellow flame pixels
+    smoke_colour_min: float = 0.35  # grey, low-colour pixels
+    verify_fire: bool = True
+    # P40: after an alarm, the same type on the same camera re-arms only once it has been gone this long
+    rearm_quiet_s: float = 20.0
 
     # incident rule thresholds (CLAUDE.md "Incident rules")
     incident_cooldown_s: float = 60.0

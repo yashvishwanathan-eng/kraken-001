@@ -104,6 +104,7 @@ export type TimelineAction =
   | 'duty_fallback'
   | 'call_skipped_on_screen'
   | 'nobody_answered'
+  | 'repeat_of'
   | string
 
 /* ── Timeline event ────────────────────────────────────── */
