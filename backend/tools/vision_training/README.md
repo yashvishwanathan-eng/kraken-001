@@ -73,6 +73,13 @@ Check the class names: open `D-Fire-1/data.yaml` in Colab; the `names:` line sho
    minutes of the lighter's flame: near and far (30 cm to 2 m), left, right, moving, against a wall, against a
    window, with a person holding it. Also film 30 s with the lighter off (no flame), and orange or bright
    things that are NOT fire (a lamp, an orange shirt): these teach it what to ignore.
+   Easiest: let the app take the photos straight from the camera, one every 0.5 s (stop the app's camera worker
+   for that camera first), from `backend\`:
+   ```powershell
+   python -m tools.capture_frames --source 0 --name lighter --seconds 90
+   python -m tools.capture_frames --source 0 --name not_fire --seconds 30
+   ```
+   The photos land in `backend\media\training\lighter` and `...\not_fire`. Then skip to step 3.
 2. **Cut it into photos** (on the laptop, from the folder with the videos):
    ```powershell
    mkdir lighter_frames
